@@ -1,0 +1,44 @@
+[
+    {
+        "Text": "\n    ",
+        "Source": "\n    ",
+        "Line": 1,
+        "Offset": 3,
+        "Scope": "text.qdoc.line"
+    },
+    {
+        "Text": "Rectangle\n    ",
+        "Source": " Rectangle\n    ",
+        "Line": 2,
+        "Offset": 12,
+        "Scope": "text.qdoc.line"
+    },
+    {
+        "Text": "A rectangle shape.\n\nThe Rectangle element defines a filled rectangle.\n\n\n",
+        "Source": " A rectangle shape.\n\n    The Rectangle element defines a filled rectangle.\n\n    ",
+        "Line": 3,
+        "Offset": 10,
+        "Scope": "text.qdoc.block"
+    },
+    {
+        "Text": "A rectangle shape.",
+        "Source": " A rectangle shape.\n\n    The Rectangle element defines a filled rectangle.\n\n    ",
+        "Line": 3,
+        "Offset": 10,
+        "Scope": "text.qdoc.brief.line"
+    },
+    {
+        "Text": "Appearance\n\nUse color and border properties.\n\n",
+        "Source": " Appearance\n\n    Use color and border properties.\n",
+        "Line": 7,
+        "Offset": 13,
+        "Scope": "text.qdoc.block"
+    },
+    {
+        "Text": "Appearance",
+        "Source": " Appearance\n\n    Use color and border properties.\n",
+        "Line": 7,
+        "Offset": 13,
+        "Scope": "text.qdoc.heading.line"
+    }
+]
