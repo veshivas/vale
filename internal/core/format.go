@@ -62,6 +62,8 @@ var FormatByExtension = map[string][]string{
 	`\.(?:adoc|asciidoc|asc)$`:                 {".adoc", "markup"},
 	`\.(?:clj|cljs|cljc|cljd)$`:                {".clj", "code"},
 	`\.(?:cpp|cc|c|cp|cxx|c\+\+|h|hpp|h\+\+)$`: {".cpp", "code"},
+	`\.(?:qdoc|qdocinc)$`:                      {".qdoc", "markup"},
+	`\.(?:qml)$`:                               {".qml", "code"},
 	`\.(?:css)$`:                      {".css", "code"},
 	`\.(?:cs|csx)$`:                   {".c", "code"},
 	`\.(?:dita)$`:                     {".dita", "markup"},
