@@ -1,0 +1,15 @@
+/*!
+    \class QRect
+    \brief Defines a rectangle using integer precision.
+
+    The QRect class defines a rectangle in the plane using integer
+    coordinates for the top-left corner, width, and height.
+
+    \section1 Getting the dimensions
+
+    Use width() and height() to get the dimensions of the rectangle.
+
+    \section2 Related classes
+
+    See also QSize and QPoint.
+*/
