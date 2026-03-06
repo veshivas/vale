@@ -33,7 +33,9 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 		return Python(), nil
 	case ".rb":
 		return Ruby(), nil
-	case ".cpp", ".qml", ".qdoc", ".qdocinc":
+	case ".cpp":
+		return Cpp(), nil
+	case ".qdoc", ".qdocinc":
 		return QDoc(), nil
 	case ".c":
 		return C(), nil
