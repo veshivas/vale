@@ -110,11 +110,21 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 	engine := NewQueryEngine(tree, lang)
 
 	for _, query := range lang.Queries {
-		q, qErr := sitter.NewQuery([]byte(query.Expr), lang.Parser)
+		expr := query.Expr
+		if query.CommandMatch != "" {
+			// Auto-generate an adjacent-sibling query that captures the text
+			// node immediately following the matched command.
+			expr = fmt.Sprintf(
+				`(block_comment (markup (command (command_name) @_cmd (#match? @_cmd "%s"))) . (markup (text) @comment))`,
+				query.CommandMatch,
+			)
+			query.FirstLine = true
+		}
+		q, qErr := sitter.NewQuery([]byte(expr), lang.Parser)
 		if qErr != nil {
 			return comments, qErr
 		}
-		comments = append(comments, engine.run(query.Name, q, source)...)
+		comments = append(comments, engine.run(query, q, source)...)
 	}
 
 	if len(lang.Queries) > 1 {

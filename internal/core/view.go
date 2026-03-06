@@ -21,9 +21,15 @@ var viewEngines = []string{"tree-sitter", "dasel"}
 
 // A Scope is a single query that we want to run against a document.
 type Scope struct {
-	Name string `yaml:"name"`
-	Expr string `yaml:"expr"`
-	Type string `yaml:"type"`
+	Name      string `yaml:"name"`
+	Expr      string `yaml:"expr"`
+	Type      string `yaml:"type"`
+	FirstLine bool   `yaml:"first_line"` // if true, only the first non-empty line of each capture is used
+	// CommandMatch, when set, auto-generates an adjacent-sibling query that
+	// captures the text node immediately following any command whose name
+	// matches the given regex. FirstLine is implied when CommandMatch is set.
+	// Example: CommandMatch: `^brief$` targets \brief descriptions.
+	CommandMatch string `yaml:"command_match"`
 }
 
 // A View is a named, virtual representation of a subset of a file's

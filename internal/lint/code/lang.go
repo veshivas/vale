@@ -14,11 +14,12 @@ type padding func(string) int
 //
 // NOTE: What about haskell, less, perl, php, powershell, r, sass, swift?
 type Language struct {
-	Delims  *regexp.Regexp
-	Parser  *sitter.Language
-	Queries []core.Scope
-	Cutset  string
-	Padding padding
+	Delims      *regexp.Regexp
+	Parser      *sitter.Language
+	Queries     []core.Scope
+	Cutset      string
+	Padding     padding
+	ScopePrefix string // if set, replaces "text.comment" in generated scopes
 }
 
 // GetLanguageFromExt returns a Language based on the given file extension.
@@ -32,8 +33,8 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 		return Python(), nil
 	case ".rb":
 		return Ruby(), nil
-	case ".cpp":
-		return Cpp(), nil
+	case ".cpp", ".qml":
+		return QDoc(), nil
 	case ".c":
 		return C(), nil
 	case ".js", ".jsx":
