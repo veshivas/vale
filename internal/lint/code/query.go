@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
+
+	"github.com/errata-ai/vale/v3/internal/core"
 )
 
 type QueryEngine struct {
@@ -26,9 +28,10 @@ func NewQueryEngine(tree *sitter.Tree, lang *Language) *QueryEngine {
 	}
 }
 
-func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Comment {
+func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte) []Comment {
 	var comments []Comment
 
+	meta := scope.Name
 	if meta != "" {
 		meta = "." + meta
 	}
@@ -44,12 +47,28 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 
 		m = qc.FilterPredicates(m, source)
 		for _, c := range m.Captures {
+			if q.CaptureNameForId(c.Index) != "comment" {
+				continue
+			}
 			rText := c.Node.Content(source)
 			cText := qe.lang.Delims.ReplaceAllString(rText, "")
 
-			scope := "text.comment" + meta + ".line"
-			if strings.Count(cText, "\n") > 1 {
-				scope = "text.comment" + meta + ".block"
+			if scope.FirstLine {
+				// Extract only the first non-empty line (heading text).
+				cText = strings.TrimLeft(cText, " \t")
+				if idx := strings.Index(cText, "\n"); idx >= 0 {
+					cText = cText[:idx]
+				}
+				cText = strings.TrimSpace(cText)
+			}
+
+			prefix := "text.comment"
+			if qe.lang.ScopePrefix != "" {
+				prefix = qe.lang.ScopePrefix
+			}
+			blkScope := prefix + meta + ".line"
+			if !scope.FirstLine && strings.Count(cText, "\n") > 1 {
+				blkScope = prefix + meta + ".block"
 
 				buf := bytes.Buffer{}
 				for _, line := range strings.Split(cText, "\n") {
@@ -63,7 +82,7 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 			comments = append(comments, Comment{
 				Line:   int(c.Node.StartPoint().Row) + 1,
 				Offset: int(c.Node.StartPoint().Column),
-				Scope:  scope,
+				Scope:  blkScope,
 				Text:   cText,
 				Source: rText,
 			})
