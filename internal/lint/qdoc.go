@@ -1,8 +1,11 @@
 package lint
 
 import (
+	"strings"
+
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/lint/code"
+	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
 func (l *Linter) lintQDoc(f *core.File) error {
@@ -19,7 +22,17 @@ func (l *Linter) lintQDoc(f *core.File) error {
 		l.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
-		err = l.lintLines(f)
+		if strings.Contains(comment.Scope, "heading") {
+			// Headings are single lines; use lintLines (no NLP needed).
+			err = l.lintLines(f)
+		} else if strings.HasSuffix(comment.Scope, ".block") {
+			// Multi-line prose blocks: use lintProse to enable sentence-scope rules.
+			block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
+			err = l.lintProse(f, block, len(f.Lines))
+		} else {
+			// Single-line scopes (brief, line): use lintLines with lookup=true.
+			err = l.lintLines(f)
+		}
 		if err != nil {
 			return err
 		}
