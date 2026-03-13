@@ -4,48 +4,55 @@
         "Source": "\n    ",
         "Line": 1,
         "Offset": 3,
-        "Scope": "text.qdoc.line"
+        "Scope": "text.comment.line"
     },
     {
-        "Text": "QRect\n    \nDefines a rectangle using integer precision.\n\nThe QRect class defines a rectangle in the plane using integer\ncoordinates for the top-left corner, width, and height.\n\n\n",
-        "Source": " QRect\n    \nDefines a rectangle using integer precision.\n\n    The QRect class defines a rectangle in the plane using integer\n    coordinates for the top-left corner, width, and height.\n\n    \n",
+        "Text": "QRect\n    ",
+        "Source": " QRect\n    ",
         "Line": 2,
         "Offset": 10,
-        "Scope": "text.qdoc.line"
+        "Scope": "text.comment.line"
+    },
+    {
+        "Text": "Defines a rectangle using integer precision.\n\nThe QRect class defines a rectangle in the plane using integer\ncoordinates for the top-left corner, width, and height.\n\n\n",
+        "Source": " Defines a rectangle using integer precision.\n\n    The QRect class defines a rectangle in the plane using integer\n    coordinates for the top-left corner, width, and height.\n\n    ",
+        "Line": 3,
+        "Offset": 10,
+        "Scope": "text.comment.block"
     },
     {
         "Text": "Defines a rectangle using integer precision.",
         "Source": " Defines a rectangle using integer precision.\n\n    The QRect class defines a rectangle in the plane using integer\n    coordinates for the top-left corner, width, and height.\n\n    ",
         "Line": 3,
         "Offset": 10,
-        "Scope": "text.qdoc.brief.line"
+        "Scope": "text.comment.brief.line"
     },
     {
         "Text": "Getting the dimensions\n\nUse width() and height() to get the dimensions of the rectangle.\n\n\n",
         "Source": " Getting the dimensions\n\n    Use width() and height() to get the dimensions of the rectangle.\n\n    ",
         "Line": 8,
         "Offset": 13,
-        "Scope": "text.qdoc.block"
+        "Scope": "text.comment.block"
     },
     {
         "Text": "Getting the dimensions",
         "Source": " Getting the dimensions\n\n    Use width() and height() to get the dimensions of the rectangle.\n\n    ",
         "Line": 8,
         "Offset": 13,
-        "Scope": "text.qdoc.heading.line"
+        "Scope": "text.comment.heading.line"
     },
     {
         "Text": "Related classes\n\nSee also QSize and QPoint.\n\n",
         "Source": " Related classes\n\n    See also QSize and QPoint.\n",
         "Line": 12,
         "Offset": 13,
-        "Scope": "text.qdoc.block"
+        "Scope": "text.comment.block"
     },
     {
         "Text": "Related classes",
         "Source": " Related classes\n\n    See also QSize and QPoint.\n",
         "Line": 12,
         "Offset": 13,
-        "Scope": "text.qdoc.heading.line"
+        "Scope": "text.comment.heading.line"
     }
 ]

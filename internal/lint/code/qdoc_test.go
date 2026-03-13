@@ -3,6 +3,7 @@ package code
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -67,9 +68,9 @@ func TestQDocScopes(t *testing.T) {
 		want  string
 	}{
 		// \brief text captured in the brief scope, first line only.
-		{"text.qdoc.brief.line", "A brief without a period"},
+		{"text.comment.brief.line", "A brief without a period"},
 		// \section1 text captured in the heading scope, first line only.
-		{"text.qdoc.heading.line", "A title-case Section Heading"},
+		{"text.comment.heading.line", "A title-case Section Heading"},
 	}
 
 	for _, tc := range cases {
@@ -89,6 +90,46 @@ func TestQDocScopes(t *testing.T) {
 				t.Errorf("scope %q: want %q; got %v", tc.scope, tc.want, texts)
 			}
 		})
+	}
+}
+
+// TestGetQDocProseBlocks verifies that GetQDocProseBlocks reconstructs prose
+// across inline-command boundaries and skips topic-command arguments.
+func TestGetQDocProseBlocks(t *testing.T) {
+	src := []byte(`/*!
+    \class QProcess
+    \brief Used to start external programs.
+
+    Set the program name; then call start() to launch the process.
+    Use \c{write()} to send data; use \c{read()} to receive output.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	// All returned blocks must have the correct scope.
+	for _, b := range blocks {
+		if b.Scope != "text.comment.block" {
+			t.Errorf("unexpected scope %q", b.Scope)
+		}
+	}
+
+	// The prose must contain the semicolons from the body text.
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+	if !strings.Contains(combined, ";") {
+		t.Errorf("prose blocks do not contain expected semicolon; got:\n%s", combined)
+	}
+	// Topic-command argument ("QProcess") must not appear.
+	if strings.Contains(combined, "QProcess") {
+		t.Errorf("prose block should not contain topic-command argument 'QProcess'; got:\n%s", combined)
 	}
 }
 

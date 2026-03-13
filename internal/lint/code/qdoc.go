@@ -15,8 +15,8 @@ func QDoc() *Language {
 			{Name: "", Expr: "(text) @comment"},
 			{Name: "heading", CommandMatch: `^section[1-6]$`},
 			{Name: "brief", CommandMatch: `^brief$`},
+			{Name: "title", CommandMatch: `^title$`},
 		},
-		Padding:     cStyle,
-		ScopePrefix: "text.qdoc",
+		Padding: cStyle,
 	}
 }
