@@ -18,7 +18,7 @@ func (l *Linter) lintData(f *core.File) error {
 			if berr != nil {
 				return core.NewE201FromTarget(
 					berr.Error(),
-					fmt.Sprintf("View = %s", view),
+					fmt.Sprintf("View = %s", syntax),
 					l.Manager.Config.RootINI,
 				)
 			}
