@@ -1,0 +1,43 @@
+/*!
+    \class ItemWidget
+    \brief Displays a list of items.
+
+    This widget displays a configurable list of items.
+
+    \image itemwidget.png
+
+    \image itemwidget-annotated.png The annotated version of the widget.
+
+    \list
+    \li First item with prose text.
+    \li Second item with more prose.
+    \endlist
+
+    \table
+    \header \li Property \li Description
+    \row \li count \li Number of items.
+    \endtable
+
+    \raw HTML
+    <p>Raw HTML passthrough content.</p>
+    \endraw
+
+    \legalese
+    Copyright (C) 2024 The Qt Company.
+    \endlegalese
+
+    \quotation
+    A well-known quote appears here.
+    \endquotation
+
+    \code
+    ItemWidget w;
+    w.setCount(10);
+    \endcode
+
+    See the \inlineimage icon.png diagram for reference.
+
+    See the \inlineimage icon-large.png {A large icon} diagram for reference.
+
+    Final prose sentence after all blocks.
+*/

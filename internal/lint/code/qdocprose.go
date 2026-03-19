@@ -100,14 +100,33 @@ func GetQDocProseBlocks(source []byte) ([]Comment, error) {
 // returns the prose as two strings:
 //   - raw:   original whitespace preserved (passed to adjustAlerts as Source)
 //   - clean: leading whitespace stripped per line  (passed to lintProse as Text)
-//
-// Rules:
-//   - command nodes: set skip flag when the command name is in skipQDocProseArgs
-//   - text nodes: appended unless skip flag is set; flag is then cleared
-//   - inline_command nodes: inline_text argument appended with braces stripped;
-//     flag is cleared (inline commands are never topic commands)
 func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) {
 	var b strings.Builder
+	qdocCollectProse(node, source, &b)
+	raw = b.String()
+	if raw == "" {
+		return
+	}
+
+	var cleanBuf bytes.Buffer
+	for _, line := range strings.Split(raw, "\n") {
+		cleanBuf.WriteString(strings.TrimLeft(line, " \t"))
+		cleanBuf.WriteString("\n")
+	}
+	clean = cleanBuf.String()
+	return
+}
+
+// qdocCollectProse appends prose text from the markup children of node to b.
+// It handles the four markup child types:
+//   - block_command: recurses into prose-bearing blocks (list, legalese, quotation);
+//     skips raw_block and table_block.
+//   - command: sets skip/code-block flags for the following text node.
+//   - text: appended when not suppressed by a skip or code-block flag.
+//   - inline_command: inline_text appended with braces stripped.
+//     Also detects \endcode/\endqml/\endsnippet, which the grammar tokenizes as
+//     inline_command \e with inline_text "ndcode"/"ndqml"/"ndsnippet".
+func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	skipNextText := false
 	inCodeBlock := false
 
@@ -121,6 +140,19 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 			child := markup.NamedChild(j)
 
 			switch child.Type() {
+			case "block_command":
+				skipNextText = false
+				// block_command has one named child: the specific block type.
+				// Recurse into prose-bearing blocks; skip raw and table.
+				if child.NamedChildCount() > 0 {
+					inner := child.NamedChild(0)
+					switch inner.Type() {
+					case "list_block", "legalese_block", "quotation_block":
+						qdocCollectProse(inner, source, b)
+					// raw_block, table_block: no prose, skip.
+					}
+				}
+
 			case "command":
 				cmdName := ""
 				for k := 0; k < int(child.NamedChildCount()); k++ {
@@ -169,17 +201,4 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 			}
 		}
 	}
-
-	raw = b.String()
-	if raw == "" {
-		return
-	}
-
-	var cleanBuf bytes.Buffer
-	for _, line := range strings.Split(raw, "\n") {
-		cleanBuf.WriteString(strings.TrimLeft(line, " \t"))
-		cleanBuf.WriteString("\n")
-	}
-	clean = cleanBuf.String()
-	return
 }
