@@ -28,6 +28,13 @@
         "Scope": "text.comment.brief.line"
     },
     {
+        "Text": "itemwidget.png",
+        "Source": "itemwidget.png",
+        "Line": 7,
+        "Offset": 11,
+        "Scope": "text.comment.image.line"
+    },
+    {
         "Text": "\n\n\n",
         "Source": "\n\n    ",
         "Line": 7,
@@ -70,13 +77,6 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "Description\n    ",
-        "Source": " Description\n    ",
-        "Line": 17,
-        "Offset": 28,
-        "Scope": "text.comment.line"
-    },
-    {
         "Text": "",
         "Source": " ",
         "Line": 17,
@@ -91,10 +91,10 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "",
-        "Source": " ",
-        "Line": 18,
-        "Offset": 8,
+        "Text": "Description\n    ",
+        "Source": " Description\n    ",
+        "Line": 17,
+        "Offset": 28,
         "Scope": "text.comment.line"
     },
     {
@@ -109,6 +109,13 @@
         "Source": " Number of items.\n    ",
         "Line": 18,
         "Offset": 22,
+        "Scope": "text.comment.line"
+    },
+    {
+        "Text": "",
+        "Source": " ",
+        "Line": 18,
+        "Offset": 8,
         "Scope": "text.comment.line"
     },
     {
@@ -173,6 +180,13 @@
         "Line": 38,
         "Offset": 33,
         "Scope": "text.comment.block"
+    },
+    {
+        "Text": "icon.png",
+        "Source": "icon.png",
+        "Line": 38,
+        "Offset": 25,
+        "Scope": "text.comment.image.line"
     },
     {
         "Text": "diagram for reference.\n\nFinal prose sentence after all blocks.\n\n",
