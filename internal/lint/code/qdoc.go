@@ -20,6 +20,7 @@ func QDoc() *Language {
 			{Name: "heading", CommandMatch: `^section[1-6]$`},
 			{Name: "brief", CommandMatch: `^brief$`},
 			{Name: "title", CommandMatch: `^title$`},
+		{Name: "image", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
 		},
 		Padding: cStyle,
 	}
