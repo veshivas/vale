@@ -1,0 +1,6 @@
+message: "'%s' found in brief"
+extends: existence
+scope: text.comment.brief
+level: error
+tokens:
+  - BADBRIEF

@@ -1,0 +1,6 @@
+message: "'%s' found in line comment"
+extends: existence
+scope: text.comment.line
+level: error
+tokens:
+  - BADLINE

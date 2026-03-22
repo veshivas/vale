@@ -1,0 +1,6 @@
+message: "'%s' found in sentence"
+extends: existence
+scope: sentence
+level: error
+tokens:
+  - BADSENTENCE

@@ -56,15 +56,15 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "First item with prose text.\n    ",
-        "Source": " First item with prose text.\n    ",
+        "Text": "First item with prose text.\n    \nSecond item with more prose.\n    \n",
+        "Source": " First item with prose text.\n    \nSecond item with more prose.\n    \n",
         "Line": 12,
         "Offset": 7,
         "Scope": "text.comment.line"
     },
     {
-        "Text": "\n\n\n\nSecond item with more prose.\n    \n",
-        "Source": "\n\n    \nSecond item with more prose.\n    \n",
+        "Text": "\n\n\n",
+        "Source": "\n\n    ",
         "Line": 14,
         "Offset": 12,
         "Scope": "text.comment.block"

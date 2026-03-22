@@ -1,0 +1,6 @@
+message: "'%s' found in prose block"
+extends: existence
+scope: text.comment.block
+level: error
+tokens:
+  - BADPROSE
