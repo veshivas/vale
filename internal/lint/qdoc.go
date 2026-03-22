@@ -166,6 +166,91 @@ func applyQDocPatterns(c *core.Config, normedExt, realExt, content string) (stri
 	return content, nil
 }
 
+// lintQDocBlock processes a single QDoc doc-comment block whose delimiters
+// have already been stripped by a code-language comment parser (e.g. Cpp()).
+// blockText is the raw comment content without /*!  and */; startLine is the
+// 1-based line of the opening /*!  in the source file.
+//
+// The block is re-wrapped in /*!...*/ so the QDoc tree-sitter grammar can
+// identify the block_comment node, then run through the same two-pass pipeline
+// as lintQDoc. Alert line numbers are corrected for the re-wrap offset so that
+// they map back to the correct positions in the original source file.
+//
+// Called by lintQDocFragments when [formats] maps a code extension to .qdoc.
+func (l *Linter) lintQDocBlock(f *core.File, blockText string, startLine int) error {
+	lang := code.QDoc()
+
+	// Re-wrap so the QDoc grammar can parse it. blockText already begins with
+	// the '\n' that followed '/*!' in the original source, so we append '/*!'
+	// directly (no extra newline) to keep node line numbers in sync with the
+	// source file. Adding "/*!\n" would shift every line by +1.
+	wrapped := "/*!" + blockText + "\n*/"
+
+	content, err := applyQDocPatterns(l.Manager.Config, f.NormedExt, f.RealExt, wrapped)
+	if err != nil {
+		return err
+	}
+
+	originalContent := f.Content
+
+	// Pass 1: heading / brief / title / line scopes.
+	comments, err := code.GetComments([]byte(content), lang)
+	if err != nil {
+		return err
+	}
+
+	last := len(f.Alerts)
+	for _, comment := range comments {
+		if strings.HasSuffix(comment.Scope, ".block") {
+			continue
+		}
+
+		l.SetMetaScope(comment.Scope)
+		f.SetText(comment.Text)
+
+		if err = l.lintLines(f); err != nil {
+			return err
+		}
+
+		size := len(f.Alerts)
+		if size != last {
+			// comment.Line is relative to the wrapped content (line 1 = "/*!").
+			// Shift by startLine - 1 so adjustAlerts maps it to the correct
+			// line in the source file: source_line = startLine + comment.Line - 1.
+			adj := comment
+			adj.Line += startLine - 1
+			f.Alerts = adjustAlerts(f.Alerts, last, adj, lang)
+		}
+		last = size
+	}
+
+	// Pass 2: reconstruct full prose per block_comment for sentence-scope rules.
+	proseBlocks, err := code.GetQDocProseBlocks([]byte(content))
+	if err != nil {
+		return err
+	}
+	for _, comment := range proseBlocks {
+		l.SetMetaScope(comment.Scope)
+		f.SetText(comment.Text)
+
+		block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
+		if err = l.lintProse(f, block, len(f.Lines)); err != nil {
+			return err
+		}
+
+		size := len(f.Alerts)
+		if size != last {
+			adj := comment
+			adj.Line += startLine - 1
+			f.Alerts = adjustAlerts(f.Alerts, last, adj, lang)
+		}
+		last = size
+	}
+
+	f.SetText(originalContent)
+	return nil
+}
+
 // blankNonNewlines replaces every non-newline character in s with a space,
 // preserving newlines so that alert line numbers remain accurate after a
 // BlockIgnores replacement.

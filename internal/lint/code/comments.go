@@ -54,8 +54,24 @@ func coalesce(comments []Comment) []Comment {
 	tBuf := bytes.Buffer{}
 	sBuf := bytes.Buffer{}
 
+	flushBuf := func() {
+		if tBuf.Len() > 0 && len(joined) > 0 {
+			last := joined[len(joined)-1]
+			last.Text += addSourceLine(tBuf.String(), false)
+			last.Source += addSourceLine(sBuf.String(), false)
+			joined[len(joined)-1] = last
+			tBuf.Reset()
+			sBuf.Reset()
+		}
+	}
+
 	for i, comment := range comments {
 		if comment.Scope == "text.comment.block" { //nolint:gocritic
+			// Flush any pending line-comment content to the previous joined
+			// comment before adding this block comment as a new entry.
+			// Without this, accumulated tBuf content would be appended to the
+			// block comment in the post-loop flush, corrupting its text.
+			flushBuf()
 			joined = append(joined, comment)
 		} else if i == 0 || doneMerging(comment, comments[i-1]) {
 			if tBuf.Len() > 0 {
@@ -77,17 +93,7 @@ func coalesce(comments []Comment) []Comment {
 		}
 	}
 
-	if tBuf.Len() > 0 {
-		last := joined[len(joined)-1]
-
-		last.Text += addSourceLine(tBuf.String(), false)
-		last.Source += addSourceLine(sBuf.String(), false)
-
-		joined[len(joined)-1] = last
-
-		tBuf.Reset()
-		sBuf.Reset()
-	}
+	flushBuf()
 
 	for i, comment := range joined {
 		joined[i].Text = strings.TrimLeft(comment.Text, " ")

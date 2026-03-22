@@ -1,0 +1,6 @@
+message: "'%s' found in heading"
+extends: existence
+scope: heading
+level: error
+tokens:
+  - BADHEADING

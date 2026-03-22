@@ -144,3 +144,166 @@ func BenchmarkLintRST(b *testing.B) {
 func BenchmarkLintMD(b *testing.B) {
 	benchmarkLint(b, "../../testdata/fixtures/benchmarks/bench.md")
 }
+
+// lintWithConfig loads the given .vale.ini and lints the file at path,
+// returning all alerts. IgnoreGlobal is set so that the user's own Vale
+// config does not interfere with the fixture config.
+func lintWithConfig(t *testing.T, iniPath, filePath string) []core.Alert {
+	t.Helper()
+
+	absIni, err := filepath.Abs(iniPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	absFile, err := filepath.Abs(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := core.ReadPipeline(&core.CLIFlags{
+		Path:         absIni,
+		IgnoreGlobal: true,
+		InExt:        ".txt", // default; tells NewFile to infer format from the src path
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	linter, err := NewLinter(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := linter.Lint([]string{absFile}, "*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no files linted for %s", filePath)
+	}
+	return files[0].Alerts
+}
+
+// alertsByCheck returns all alerts that match the given rule name.
+func alertsByCheck(alerts []core.Alert, check string) []core.Alert {
+	var out []core.Alert
+	for _, a := range alerts {
+		if a.Check == check {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// hasAlertAtLine returns whether any alert with the given check fires at line.
+func hasAlertAtLine(alerts []core.Alert, check string, line int) bool {
+	for _, a := range alerts {
+		if a.Check == check && a.Line == line {
+			return true
+		}
+	}
+	return false
+}
+
+// hasNoAlertAtLine returns whether NO alert fires at the given line.
+func hasNoAlertAtLine(alerts []core.Alert, line int) bool {
+	for _, a := range alerts {
+		if a.Line == line {
+			return false
+		}
+	}
+	return true
+}
+
+// TestQDocFragments verifies that /*!...*/ QDoc doc-comment blocks embedded in
+// .cpp and .qml source files are routed through the full QDoc two-pass pipeline
+// when [formats] cpp = qdoc / qml = qdoc is configured.
+//
+// Test fixture layout (test.cpp and test.qml share the same structure):
+//
+//	 1: /*!
+//	 2:     \class Widget          (or \qmltype Button)
+//	 3:     \brief BADBRIEF text.  → BriefMarker at line 3
+//	 4:     (blank)
+//	 5:     BADPROSE body. BADSENTENCE body.  → ProseMarker + SentenceMarker (NLP offset: line 4)
+//	 6:     (blank)
+//	 7:     \section1 BADHEADING Title  → HeadingMarker at line 7
+//	 8:     (blank)
+//	 9:     \code
+//	10:     BADPROSE suppressed.        → BlockIgnores: no alert here
+//	11:     \endcode
+//	12: */
+//	13: // BADLINE line comment         → LineMarker at line 13
+//	14: (blank)
+//	15: /*
+//	16:     BADPROSE block comment.     → ProseMarker at line 16 (lintLines path)
+//	17: */
+//	18: (blank)
+//	19: /*!
+//	20:     \class Button              (second QDoc block)
+//	21:     \brief Second block brief.
+//	22:     (blank)
+//	23:     \section1 BADHEADING Second  → HeadingMarker at line 23 (line-number accuracy)
+//	24: */
+func TestQDocFragments(t *testing.T) {
+	const ini = "../../testdata/fixtures/qdoc-fragments/.vale.ini"
+
+	for _, file := range []string{
+		"../../testdata/fixtures/qdoc-fragments/test.cpp",
+		"../../testdata/fixtures/qdoc-fragments/test.qml",
+	} {
+		t.Run(file, func(t *testing.T) {
+			alerts := lintWithConfig(t, ini, file)
+
+			// --- QDoc two-pass pipeline: heading scope ---
+			// \section1 BADHEADING at source line 7 → HeadingMarker at line 7.
+			if !hasAlertAtLine(alerts, "Test.HeadingMarker", 7) {
+				t.Errorf("expected Test.HeadingMarker at line 7 (\\section1); alerts: %v", alerts)
+			}
+
+			// --- QDoc two-pass pipeline: brief scope ---
+			// \brief BADBRIEF at source line 3 → BriefMarker at line 3.
+			if !hasAlertAtLine(alerts, "Test.BriefMarker", 3) {
+				t.Errorf("expected Test.BriefMarker at line 3 (\\brief); alerts: %v", alerts)
+			}
+
+			// --- QDoc two-pass pipeline: prose body (lintProse pass 2) ---
+			// BADPROSE in prose body fires via lintProse. Line offset from NLP
+			// sentence reconstruction places it at line 4 (one before source line 5).
+			if len(alertsByCheck(alerts, "Test.ProseMarker")) == 0 {
+				t.Errorf("expected at least one Test.ProseMarker alert; alerts: %v", alerts)
+			}
+
+			// --- QDoc two-pass pipeline: sentence scope (lintProse pass 2) ---
+			// BADSENTENCE fires via sentence-scoped rule on prose body.
+			if len(alertsByCheck(alerts, "Test.SentenceMarker")) == 0 {
+				t.Errorf("expected at least one Test.SentenceMarker alert; alerts: %v", alerts)
+			}
+
+			// --- BlockIgnores: \code...\endcode content is suppressed ---
+			// BADPROSE at line 10 (inside \code block) must not produce an alert.
+			if !hasNoAlertAtLine(alerts, 10) {
+				t.Errorf("expected no alert at line 10 (inside \\code block); alerts: %v", alerts)
+			}
+
+			// --- Regular // line comment (lintLines path) ---
+			// BADLINE in // comment at source line 13 → LineMarker at line 13.
+			if !hasAlertAtLine(alerts, "Test.LineMarker", 13) {
+				t.Errorf("expected Test.LineMarker at line 13 (// comment); alerts: %v", alerts)
+			}
+
+			// --- Regular /* */ block comment (lintLines path) ---
+			// Multi-line /* */ comment with BADPROSE at source line 16 →
+			// ProseMarker at line 16 (lintLines adjusts by comment.Line - 1).
+			if !hasAlertAtLine(alerts, "Test.ProseMarker", 16) {
+				t.Errorf("expected Test.ProseMarker at line 16 (/* */ block comment); alerts: %v", alerts)
+			}
+
+			// --- Second QDoc block: line-number accuracy ---
+			// \section1 BADHEADING Second at source line 23 → HeadingMarker at line 23.
+			if !hasAlertAtLine(alerts, "Test.HeadingMarker", 23) {
+				t.Errorf("expected Test.HeadingMarker at line 23 (second block \\section1); alerts: %v", alerts)
+			}
+		})
+	}
+}
