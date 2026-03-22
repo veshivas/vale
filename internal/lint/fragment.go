@@ -65,6 +65,12 @@ func (l *Linter) lintFragments(f *core.File) error {
 		lang.Queries = found
 	}
 
+	// QDoc markup embedded in code files (.cpp, .qml via [formats] cpp = qdoc)
+	// needs the full QDoc two-pass pipeline rather than a markup→HTML converter.
+	if f.NormedExt == ".qdoc" {
+		return l.lintQDocFragments(f, lang)
+	}
+
 	comments, err := code.GetComments([]byte(f.Content), lang)
 	if err != nil {
 		return err
@@ -96,4 +102,49 @@ func (l *Linter) lintFragments(f *core.File) error {
 	}
 
 	return err
+}
+
+// lintQDocFragments handles QDoc markup embedded in code files such as .cpp
+// and .qml (reached via [formats] cpp = qdoc in .vale.ini). It extracts all
+// comment blocks using the code language's grammar, routes /*!...*/ doc-comment
+// blocks through the full QDoc two-pass pipeline, and processes regular
+// comments with lintLines.
+func (l *Linter) lintQDocFragments(f *core.File, lang *code.Language) error {
+	// Always use Cpp() for /*!...*/ boundary detection. Both .cpp and .qml
+	// use C-style doc comment delimiters, so Cpp() correctly identifies QDoc
+	// block boundaries regardless of the source language. The lang parameter
+	// is retained for adjustAlerts padding on regular (non-QDoc) comments.
+	cppLang := code.Cpp()
+	comments, err := code.GetComments([]byte(f.Content), cppLang)
+	if err != nil {
+		return err
+	}
+
+	wholeFile := f.Content
+	for _, comment := range comments {
+		if strings.HasSuffix(comment.Scope, ".block") &&
+			strings.HasPrefix(comment.Source, "/*!") {
+			// QDoc doc-comment block: use the full two-pass QDoc pipeline.
+			// lintQDocBlock handles its own alert position adjustment and
+			// restores f.Content before returning.
+			if err = l.lintQDocBlock(f, comment.Text, comment.Line); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Regular line or block comment: process with lintLines.
+		l.SetMetaScope(comment.Scope)
+		f.SetText(comment.Text)
+		last := len(f.Alerts)
+		if err = l.lintLines(f); err != nil {
+			return err
+		}
+		if len(f.Alerts) != last {
+			f.Alerts = adjustAlerts(f.Alerts, last, comment, lang)
+		}
+	}
+
+	f.SetText(wholeFile)
+	return nil
 }
