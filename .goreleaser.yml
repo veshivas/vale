@@ -1,5 +1,12 @@
+version: 2
 env:
   - CGO_ENABLED=1
+
+release:
+  github:
+    owner: veshivas
+    name: vale
+  prerelease: auto
 
 builds:
   - id: vale-darwin-amd64
@@ -10,8 +17,8 @@ builds:
     goos:
       - darwin
     env:
-      - CC=o64-clang
-      - CXX=o64-clang++
+      - CC=clang
+      - CXX=clang++
     flags:
       - -trimpath
 
@@ -23,8 +30,8 @@ builds:
     goos:
       - darwin
     env:
-      - CC=oa64-clang
-      - CXX=oa64-clang++
+      - CC=clang
+      - CXX=clang++
     flags:
       - -trimpath
 
@@ -36,8 +43,8 @@ builds:
     goos:
       - linux
     env:
-      - CC=x86_64-linux-gnu-gcc
-      - CXX=x86_64-linux-gnu-g++
+      - CC=zig cc -target x86_64-linux-gnu
+      - CXX=zig c++ -target x86_64-linux-gnu
     flags:
       - -trimpath
 
@@ -49,8 +56,8 @@ builds:
     goos:
       - linux
     env:
-      - CC=aarch64-linux-gnu-gcc
-      - CXX=aarch64-linux-gnu-g++
+      - CC=zig cc -target aarch64-linux-gnu
+      - CXX=zig c++ -target aarch64-linux-gnu
     flags:
       - -trimpath
 
@@ -71,11 +78,18 @@ builds:
       - -s -w -X main.version={{.Version}}
       - -extldflags=-static
 
+universal_binaries:
+  - ids:
+      - vale-darwin-amd64
+      - vale-darwin-arm64
+    name_template: vale_{{ .Version }}_macOS_universal
+    replace: true
+
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: >-
       vale_{{ .Version }}_
       {{- if eq .Os "darwin" }}macOS_
@@ -89,6 +103,10 @@ archives:
 # while it's still a draft; publish it from the UI once GoReleaser finishes.
 release:
   draft: true
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
 
 chocolateys:
   - # Your app's package name.
@@ -119,7 +137,7 @@ chocolateys:
 
     # Your app's project url.
     # It is a required field.
-    project_url: https://github.com/errata-ai/vale
+    project_url: https://github.com/veshivas/vale
 
     # Template for the url which is determined by the given Token (github,
     # gitlab or gitea)
