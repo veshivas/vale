@@ -168,8 +168,17 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				}
 
 			case "text":
+				content := child.Content(source)
 				if !skipNextText && !inCodeBlock {
-					b.WriteString(child.Content(source))
+					b.WriteString(content)
+				} else {
+					// Preserve newlines from skipped text so that prose line
+					// offsets stay in sync with source line numbers.
+					for _, r := range content {
+						if r == '\n' {
+							b.WriteRune('\n')
+						}
+					}
 				}
 				skipNextText = false
 
