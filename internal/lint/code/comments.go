@@ -22,7 +22,10 @@ type Comment struct {
 // doneMerging determines when we should *stop* concatenating line-scoped
 // comments.
 func doneMerging(curr, prev Comment) bool {
-	if prev.Line != curr.Line-1 {
+	if prev.Scope != curr.Scope {
+		// Comments with different scopes must not be merged.
+		return true
+	} else if prev.Line != curr.Line-1 {
 		// If the comments aren't on consecutive lines, don't merge them.
 		return true
 	} else if prev.Offset != curr.Offset {
@@ -115,26 +118,40 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 	}
 	engine := NewQueryEngine(tree, lang)
 
+	// Pass 1: run all CommandMatch queries, collecting the set of text-node
+	// start bytes that they consume. These nodes must not be re-linted by the
+	// catch-all (text) query to prevent duplicate alerts for the same text.
+	consumed := make(map[uint32]bool)
 	for _, query := range lang.Queries {
-		expr := query.Expr
-		if query.CommandMatch != "" {
-			// Auto-generate an adjacent-sibling query that captures the text
-			// node immediately following the matched command.
-			expr = fmt.Sprintf(
-				`(block_comment (markup (command (command_name) @_cmd (#match? @_cmd "%s"))) . (markup (text) @comment))`,
-				query.CommandMatch,
-			)
-			query.FirstLine = true
+		if query.CommandMatch == "" {
+			continue
 		}
-		q, qErr := sitter.NewQuery([]byte(expr), lang.Parser)
+		results, nodeBytes, err := engine.runCommandMatch(query, source)
+		if err != nil {
+			return comments, err
+		}
+		comments = append(comments, results...)
+		for k := range nodeBytes {
+			consumed[k] = true
+		}
+	}
+
+	// Pass 2: run plain Expr queries, skipping any node already consumed above.
+	for _, query := range lang.Queries {
+		if query.CommandMatch != "" {
+			continue
+		}
+		q, qErr := sitter.NewQuery([]byte(query.Expr), lang.Parser)
 		if qErr != nil {
 			return comments, qErr
 		}
-		comments = append(comments, engine.run(query, q, source)...)
+		comments = append(comments, engine.run(query, q, source, consumed)...)
 	}
 
 	if len(lang.Queries) > 1 {
-		sort.Slice(comments, func(p, q int) bool {
+		// Interleave Pass 1 (CommandMatch) and Pass 2 (Expr) results by line
+		// number so that coalesce sees comments in source order.
+		sort.SliceStable(comments, func(p, q int) bool {
 			return comments[p].Line < comments[q].Line
 		})
 	}

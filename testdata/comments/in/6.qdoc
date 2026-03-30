@@ -1,9 +1,13 @@
 /*!
     \class QRect
-    \brief Defines a rectangle using integer precision.
+    \brief Defines a rectangle using \c{integer} precision.
 
     The QRect class defines a rectangle in the plane using integer
     coordinates for the top-left corner, width, and height.
+
+    \note The \c{isValid()} method returns \c{false} for a null rectangle.
+
+    \warning Calling \c{setWidth()} with a negative value produces undefined behaviour.
 
     \section1 Getting the dimensions
 

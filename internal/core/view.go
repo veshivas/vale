@@ -24,11 +24,12 @@ type Scope struct {
 	Expr      string `yaml:"expr"`
 	Type      string `yaml:"type"`
 	FirstLine bool   `yaml:"first_line"` // if true, only the first non-empty line of each capture is used
-	// CommandMatch, when set, auto-generates an adjacent-sibling query that
-	// captures the text node immediately following any command whose name
-	// matches the given regex. FirstLine is implied when CommandMatch is set.
-	// Example: CommandMatch: `^brief$` targets \brief descriptions.
-	CommandMatch string `yaml:"command_match"`
+	// CommandMatch, when set, walks all markup siblings after the matched
+	// command to reconstruct the complete text argument, spanning
+	// inline-command boundaries (e.g. \c, \b, \l). By default only the
+	// first line is kept. Set UntilBlankLine for multi-line commands.
+	CommandMatch   string `yaml:"command_match"`
+	UntilBlankLine bool   `yaml:"until_blank_line"` // collect text until first blank line (\n\n)
 }
 
 // A View is a named, virtual representation of a subset of a file's
