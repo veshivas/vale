@@ -14,44 +14,37 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "Defines a rectangle using integer precision.\n\nThe QRect class defines a rectangle in the plane using integer\ncoordinates for the top-left corner, width, and height.\n\n\n",
-        "Source": " Defines a rectangle using integer precision.\n\n    The QRect class defines a rectangle in the plane using integer\n    coordinates for the top-left corner, width, and height.\n\n    ",
-        "Line": 3,
-        "Offset": 10,
-        "Scope": "text.comment.block"
-    },
-    {
         "Text": "Defines a rectangle using integer precision.",
-        "Source": " Defines a rectangle using integer precision.\n\n    The QRect class defines a rectangle in the plane using integer\n    coordinates for the top-left corner, width, and height.\n\n    ",
+        "Source": "Defines a rectangle using integer precision.",
         "Line": 3,
         "Offset": 10,
         "Scope": "text.comment.brief.line"
     },
     {
-        "Text": "Getting the dimensions\n\nUse width() and height() to get the dimensions of the rectangle.\n\n\n",
-        "Source": " Getting the dimensions\n\n    Use width() and height() to get the dimensions of the rectangle.\n\n    ",
+        "Text": "The isValid() method returns false for a null rectangle.",
+        "Source": "The isValid() method returns false for a null rectangle.",
         "Line": 8,
-        "Offset": 13,
-        "Scope": "text.comment.block"
+        "Offset": 9,
+        "Scope": "text.comment.note.line"
+    },
+    {
+        "Text": "Calling setWidth() with a negative value produces undefined behaviour.",
+        "Source": "Calling setWidth() with a negative value produces undefined behaviour.",
+        "Line": 10,
+        "Offset": 12,
+        "Scope": "text.comment.warning.line"
     },
     {
         "Text": "Getting the dimensions",
-        "Source": " Getting the dimensions\n\n    Use width() and height() to get the dimensions of the rectangle.\n\n    ",
-        "Line": 8,
+        "Source": "Getting the dimensions",
+        "Line": 12,
         "Offset": 13,
         "Scope": "text.comment.heading.line"
     },
     {
-        "Text": "Related classes\n\nSee also QSize and QPoint.\n\n",
-        "Source": " Related classes\n\n    See also QSize and QPoint.\n",
-        "Line": 12,
-        "Offset": 13,
-        "Scope": "text.comment.block"
-    },
-    {
         "Text": "Related classes",
-        "Source": " Related classes\n\n    See also QSize and QPoint.\n",
-        "Line": 12,
+        "Source": "Related classes",
+        "Line": 16,
         "Offset": 13,
         "Scope": "text.comment.heading.line"
     }

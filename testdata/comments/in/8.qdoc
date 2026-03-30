@@ -1,8 +1,13 @@
 /*!
     \class ItemWidget
     \brief Displays a list of items.
+    Can span multiple lines until the first blank line.
 
     This widget displays a configurable list of items.
+
+    \note Call \c{refresh()} after modifying the model.
+
+    \warning Do not call \c{setCount()} while the widget is \c{visible}.
 
     \image itemwidget.png
 

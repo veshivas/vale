@@ -18,9 +18,11 @@ func QDoc() *Language {
 		Queries: []core.Scope{
 			{Name: "", Expr: "(text) @comment"},
 			{Name: "heading", CommandMatch: `^section[1-6]$`},
-			{Name: "brief", CommandMatch: `^brief$`},
+			{Name: "brief",   CommandMatch: `^brief$`,   UntilBlankLine: true},
+			{Name: "note",    CommandMatch: `^note$`,    UntilBlankLine: true},
+			{Name: "warning", CommandMatch: `^warning$`, UntilBlankLine: true},
 			{Name: "title", CommandMatch: `^title$`},
-		{Name: "image", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
+			{Name: "image", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
 		},
 		Padding: cStyle,
 	}
