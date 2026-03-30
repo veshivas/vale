@@ -14,30 +14,23 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "A rectangle shape.\n\nThe Rectangle element defines a filled rectangle.\n\n\n",
-        "Source": " A rectangle shape.\n\n    The Rectangle element defines a filled rectangle.\n\n    ",
-        "Line": 3,
-        "Offset": 10,
-        "Scope": "text.comment.block"
-    },
-    {
         "Text": "A rectangle shape.",
-        "Source": " A rectangle shape.\n\n    The Rectangle element defines a filled rectangle.\n\n    ",
+        "Source": "A rectangle shape.",
         "Line": 3,
         "Offset": 10,
         "Scope": "text.comment.brief.line"
     },
     {
-        "Text": "Appearance\n\nUse color and border properties.\n\n",
-        "Source": " Appearance\n\n    Use color and border properties.\n",
+        "Text": "Only visible when the visible property is true.",
+        "Source": "Only visible when the visible property is true.",
         "Line": 7,
-        "Offset": 13,
-        "Scope": "text.comment.block"
+        "Offset": 9,
+        "Scope": "text.comment.note.line"
     },
     {
         "Text": "Appearance",
-        "Source": " Appearance\n\n    Use color and border properties.\n",
-        "Line": 7,
+        "Source": "Appearance",
+        "Line": 9,
         "Offset": 13,
         "Scope": "text.comment.heading.line"
     }
