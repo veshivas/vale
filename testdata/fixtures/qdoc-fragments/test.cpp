@@ -10,7 +10,7 @@
     BADPROSE suppressed.
     \endcode
 */
-// BADLINE line comment
+// BADLINE line comment — must NOT be linted (single-line C++ comment)
 
 /*
     BADPROSE block comment.

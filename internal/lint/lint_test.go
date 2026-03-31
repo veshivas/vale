@@ -286,10 +286,10 @@ func TestQDocFragments(t *testing.T) {
 				t.Errorf("expected no alert at line 10 (inside \\code block); alerts: %v", alerts)
 			}
 
-			// --- Regular // line comment (lintLines path) ---
-			// BADLINE in // comment at source line 13 → LineMarker at line 13.
-			if !hasAlertAtLine(alerts, "Test.LineMarker", 13) {
-				t.Errorf("expected Test.LineMarker at line 13 (// comment); alerts: %v", alerts)
+			// --- Single-line // comments are skipped in QDoc fragment linting ---
+			// BADLINE in // comment at source line 13 must NOT produce an alert.
+			if !hasNoAlertAtLine(alerts, 13) {
+				t.Errorf("expected no alert at line 13 (// comment should be skipped); alerts: %v", alerts)
 			}
 
 			// --- Regular /* */ block comment (lintLines path) ---
