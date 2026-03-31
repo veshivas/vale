@@ -133,7 +133,13 @@ func (l *Linter) lintQDocFragments(f *core.File, lang *code.Language) error {
 			continue
 		}
 
-		// Regular line or block comment: process with lintLines.
+		// Skip single-line (//) C++ comments — only /*!...*/ doc-comment
+		// blocks are QDoc documentation.
+		if strings.HasSuffix(comment.Scope, ".line") {
+			continue
+		}
+
+		// Regular block comment (/* ... */): process with lintLines.
 		l.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 		last := len(f.Alerts)
