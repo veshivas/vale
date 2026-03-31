@@ -45,10 +45,28 @@ func (l *Linter) lintQDoc(f *core.File) error {
 		l.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
-		// Headings and single-line scopes (brief, line): lintLines with lookup=true.
-		err = l.lintLines(f)
-		if err != nil {
-			return err
+		if isQDocProseCommandScope(comment.Scope) {
+			// brief/note/warning: use lintProse only (not lintLines + lintProse).
+			// lintProse runs lintBlock for each NLP sub-block (sentence, paragraph,
+			// text), covering both scope:text and scope:sentence rules in one pass.
+			// Calling lintLines first then lintProse causes duplicates because the
+			// two position-finding paths (FindLoc vs assignLoc) produce different
+			// Span[0] values, causing f.history deduplication to miss.
+			//
+			// Use NewLinedBlock with line=0 so assignLoc returns line=1 (not
+			// line=0) for single-line text, avoiding a findLine panic from the
+			// default Line=-1 set by NewBlock.
+			block := nlp.NewLinedBlock("", f.Content, "text"+l.metaScope+f.RealExt, 0)
+			err = l.lintProse(f, block, len(f.Lines))
+			if err != nil {
+				return err
+			}
+		} else {
+			// Headings and other single-line scopes: lintLines with lookup=true.
+			err = l.lintLines(f)
+			if err != nil {
+				return err
+			}
 		}
 
 		size := len(f.Alerts)
@@ -208,8 +226,15 @@ func (l *Linter) lintQDocBlock(f *core.File, blockText string, startLine int) er
 		l.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
-		if err = l.lintLines(f); err != nil {
-			return err
+		if isQDocProseCommandScope(comment.Scope) {
+			block := nlp.NewLinedBlock("", f.Content, "text"+l.metaScope+f.RealExt, 0)
+			if err = l.lintProse(f, block, len(f.Lines)); err != nil {
+				return err
+			}
+		} else {
+			if err = l.lintLines(f); err != nil {
+				return err
+			}
 		}
 
 		size := len(f.Alerts)
@@ -249,6 +274,17 @@ func (l *Linter) lintQDocBlock(f *core.File, blockText string, startLine int) er
 
 	f.SetText(originalContent)
 	return nil
+}
+
+// isQDocProseCommandScope reports whether the comment scope was produced by a
+// CommandMatch query whose content should also be run through lintProse for
+// scope: sentence rule coverage (SentenceLength, OxfordComma, Semicolon).
+// These are brief/note/warning — their text nodes are excluded from
+// GetQDocProseBlocks via skipQDocProseUntilBlank to prevent duplicates.
+func isQDocProseCommandScope(scope string) bool {
+	return strings.Contains(scope, ".brief.") ||
+		strings.Contains(scope, ".note.") ||
+		strings.Contains(scope, ".warning.")
 }
 
 // blankNonNewlines replaces every non-newline character in s with a space,
