@@ -23,6 +23,17 @@ var codeBlockExitInlineTexts = map[string]bool{
 	"ndcode": true, "ndqml": true, "ndsnippet": true,
 }
 
+// skipQDocProseUntilBlank contains QDoc commands whose content (spanning
+// inline-command boundaries until the first blank line) is linted separately
+// via their own CommandMatch scope (brief.line, note.line, warning.line).
+// qdocCollectProse skips all markup siblings after these commands until it
+// sees a \n\n boundary, then resumes prose collection. This prevents
+// scope: text rules from firing twice (once via lintLines on the .line
+// comment and once via lintProse on the reconstructed prose block).
+var skipQDocProseUntilBlank = map[string]bool{
+	"brief": true, "note": true, "warning": true,
+}
+
 // skipQDocProseArgs contains QDoc commands whose immediately-following text
 // node holds a structured argument (identifier, signature, or reference list)
 // rather than prose. Text nodes after these commands are excluded from prose
@@ -129,6 +140,7 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	skipNextText := false
 	inCodeBlock := false
+	skipUntilBlankLine := false
 
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		markup := node.NamedChild(i)
@@ -142,6 +154,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 			switch child.Type() {
 			case "block_command":
 				skipNextText = false
+				skipUntilBlankLine = false
 				// block_command has one named child: the specific block type.
 				// Recurse into prose-bearing blocks; skip raw and table.
 				if child.NamedChildCount() > 0 {
@@ -163,15 +176,21 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				if codeBlockEnterCommands[cmdName] {
 					inCodeBlock = true
 					skipNextText = false
+					skipUntilBlankLine = false
+				} else if skipQDocProseUntilBlank[cmdName] {
+					// brief/note/warning: skip all content until first blank
+					// line. Their text is linted separately via lintLines +
+					// lintProse on the .line comment produced by runCommandMatch.
+					skipUntilBlankLine = true
+					skipNextText = false
 				} else {
+					skipUntilBlankLine = false
 					skipNextText = skipQDocProseArgs[cmdName]
 				}
 
 			case "text":
 				content := child.Content(source)
-				if !skipNextText && !inCodeBlock {
-					b.WriteString(content)
-				} else {
+				if inCodeBlock || skipNextText {
 					// Preserve newlines from skipped text so that prose line
 					// offsets stay in sync with source line numbers.
 					for _, r := range content {
@@ -179,6 +198,26 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 							b.WriteRune('\n')
 						}
 					}
+				} else if skipUntilBlankLine {
+					// Skip content until the first blank line (\n\n), then
+					// resume prose collection from that point onward.
+					if idx := strings.Index(content, "\n\n"); idx >= 0 {
+						for _, r := range content[:idx] {
+							if r == '\n' {
+								b.WriteRune('\n')
+							}
+						}
+						b.WriteString(content[idx:])
+						skipUntilBlankLine = false
+					} else {
+						for _, r := range content {
+							if r == '\n' {
+								b.WriteRune('\n')
+							}
+						}
+					}
+				} else {
+					b.WriteString(content)
 				}
 				skipNextText = false
 
@@ -201,7 +240,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				// inline_command \e with inline_text "ndcode"/"ndqml"/"ndsnippet".
 				if inCodeBlock && icName == "e" && codeBlockExitInlineTexts[icText] {
 					inCodeBlock = false
-				} else if !inCodeBlock {
+				} else if !inCodeBlock && !skipUntilBlankLine {
 					skipNextText = false
 					if icText != "" {
 						b.WriteString(icText)
