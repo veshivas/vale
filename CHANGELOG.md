@@ -4,6 +4,18 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.14.2-qdocsupport-alpha2] - 2026-04-07
+
+### Added
+
+- **Macro name support in QDoc grammar** — Unknown QDoc macros (`\QUL`, `\macos`, `\BUILDVAR`, etc.) are now parsed as `command` nodes via a new `macro_name` catch-all rule in the tree-sitter grammar. Previously, macros were misparsed as `inline_command` nodes (swallowing subsequent prose) or split at single letters (`\orderedlist` → `\o` + `rderedlist`), causing false-positive spelling alerts.
+
+### Fixed
+
+- **Single-line C++ comments skipped in QDoc fragment linting** — `//` comments inside `/*!...*/` doc-comment blocks were incorrectly linted as prose. These are now excluded from the QDoc pipeline.
+
+---
+
 ## [v3.14.2-qdocsupport-alpha1] - 2026-03-31
 
 ### Added
