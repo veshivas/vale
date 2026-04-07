@@ -157,6 +157,10 @@ github.com/veshivas/tree-sitter-qdoc v0.0.0-20260327105854-adb736869328 h1:7wOpx
 github.com/veshivas/tree-sitter-qdoc v0.0.0-20260327105854-adb736869328/go.mod h1:aWa6WsRt2bOiqXy5dGzktamHdxvGc+ffnJYDo2jt3gs=
 github.com/veshivas/tree-sitter-qdoc v0.0.0-20260327153217-068f7df925ce h1:U00gaQYDIe72wEiwpJguaM0b8VSEZhr7OaGwQmO7Pxw=
 github.com/veshivas/tree-sitter-qdoc v0.0.0-20260327153217-068f7df925ce/go.mod h1:aWa6WsRt2bOiqXy5dGzktamHdxvGc+ffnJYDo2jt3gs=
+github.com/veshivas/tree-sitter-qdoc v0.0.0-20260407090704-b1ce05bc31d9 h1:qbNYxvS/1Dg5WA/Uz05KQfcyAn+3rX38QumRRD0jcRI=
+github.com/veshivas/tree-sitter-qdoc v0.0.0-20260407090704-b1ce05bc31d9/go.mod h1:aWa6WsRt2bOiqXy5dGzktamHdxvGc+ffnJYDo2jt3gs=
+github.com/veshivas/tree-sitter-qdoc v0.0.0-20260407114132-5386f0f03a32 h1:EwrAb7WSYDTiluSa/3NiMpbfTw+wjiXOiMeSj43txeI=
+github.com/veshivas/tree-sitter-qdoc v0.0.0-20260407114132-5386f0f03a32/go.mod h1:aWa6WsRt2bOiqXy5dGzktamHdxvGc+ffnJYDo2jt3gs=
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778/go.mod h1:2MuV+tbUrU1zIOPMxZ5EncGwgmMJsa+9ucAQZXxsObs=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
