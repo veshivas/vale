@@ -26,13 +26,12 @@ var codeBlockEnterCommands = map[string]bool{
 	"code": true, "qml": true, "badcode": true, "snippet": true,
 }
 
-// codeBlockExitInlineTexts maps the inline_text content that signals the end
-// of a code block. The QDoc grammar tokenizes \endcode as inline_command \e
-// with inline_text "ndcode" (because "e" is a recognized inline_command_name
-// and the rest becomes inline_text). Similarly: \endqml → "ndqml",
-// \endsnippet → "ndsnippet".
-var codeBlockExitInlineTexts = map[string]bool{
-	"ndcode": true, "ndqml": true, "ndsnippet": true,
+// codeBlockExitCommands lists the command names (via macro_name) that end a
+// code block. The grammar parses \endcode as command → macro_name "endcode"
+// (not as a block_command pair), so qdocCollectProse must detect these in the
+// "command" case to clear the inCodeBlock flag.
+var codeBlockExitCommands = map[string]bool{
+	"endcode": true, "endqml": true, "endsnippet": true, "endbadcode": true,
 }
 
 // skipQDocProseUntilBlank lists commands whose text content (until the first
@@ -147,12 +146,13 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 // qdocCollectProse appends prose text from the markup children of node to b.
 // It handles the four markup child types:
 //   - block_command: recurses into prose-bearing blocks (list, legalese, quotation);
-//     skips raw_block and table_block.
-//   - command: sets skip/code-block flags for the following text node.
+//     skips raw_block, table_block, and others without prose content.
+//   - command: checks command_name or macro_name to set state flags — entering/
+//     exiting code blocks, skipping topic-command arguments, or pausing until a
+//     blank line for brief/note/warning content.
 //   - text: appended when not suppressed by a skip or code-block flag.
-//   - inline_command: inline_text appended with braces stripped.
-//     Also detects \endcode/\endqml/\endsnippet, which the grammar tokenizes as
-//     inline_command \e with inline_text "ndcode"/"ndqml"/"ndsnippet".
+//   - inline_command: inline_text content appended with braces stripped
+//     (e.g. \c{write()} → "write()").
 func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	skipNextText := false
 	inCodeBlock := false
@@ -183,13 +183,21 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				}
 
 			case "command":
+				// Extract the command name from either command_name (known QDoc
+				// commands) or macro_name (custom macros and \end* commands).
+				// The grammar parses \endcode as command → macro_name "endcode",
+				// not command_name, so both must be checked.
 				cmdName := ""
 				for k := 0; k < int(child.NamedChildCount()); k++ {
-					if cn := child.NamedChild(k); cn.Type() == "command_name" {
+					cn := child.NamedChild(k)
+					if cn.Type() == "command_name" || cn.Type() == "macro_name" {
 						cmdName = cn.Content(source)
 					}
 				}
-				if codeBlockEnterCommands[cmdName] {
+				if codeBlockExitCommands[cmdName] {
+					inCodeBlock = false
+					skipNextText = false
+				} else if codeBlockEnterCommands[cmdName] {
 					inCodeBlock = true
 					skipNextText = false
 					skipUntilBlankLine = false
@@ -238,30 +246,23 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				skipNextText = false
 
 			case "inline_command":
-				icName := ""
-				icText := ""
+				if inCodeBlock || skipUntilBlankLine {
+					break
+				}
+				// Extract inline_text content with braces stripped.
+				// e.g. \c{write()} → "write()", \b{bold text} → "bold text"
 				for k := 0; k < int(child.NamedChildCount()); k++ {
 					ic := child.NamedChild(k)
-					switch ic.Type() {
-					case "inline_command_name":
-						icName = ic.Content(source)
-					case "inline_text":
+					if ic.Type() == "inline_text" {
 						t := strings.TrimSpace(ic.Content(source))
 						t = strings.TrimPrefix(t, "{")
 						t = strings.TrimSuffix(t, "}")
-						icText = t
+						if t != "" {
+							b.WriteString(t)
+						}
 					}
 				}
-				// \endcode/\endqml/\endsnippet are tokenized by the grammar as
-				// inline_command \e with inline_text "ndcode"/"ndqml"/"ndsnippet".
-				if inCodeBlock && icName == "e" && codeBlockExitInlineTexts[icText] {
-					inCodeBlock = false
-				} else if !inCodeBlock && !skipUntilBlankLine {
-					skipNextText = false
-					if icText != "" {
-						b.WriteString(icText)
-					}
-				}
+				skipNextText = false
 			}
 		}
 	}
