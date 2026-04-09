@@ -1,3 +1,14 @@
+// qdocprose.go reconstructs full prose from QDoc block_comment nodes, spanning
+// inline-command boundaries so that NLP sentence splitting operates on complete
+// sentences rather than fragments interrupted by \c{...}, \b{...}, etc.
+//
+// This is used by lintQDoc Pass 2 (internal/lint/qdoc.go) to enable
+// scope:sentence rules (OxfordComma, SentenceLength, Semicolon) on QDoc prose.
+//
+// The reconstruction algorithm is a single-pass linear walk over the flat
+// block_comment → markup* AST structure. Each markup node has exactly one named
+// child: command, inline_command, text, or block_command. State flags track
+// code blocks and skip regions to exclude non-prose content.
 package code
 
 import (
@@ -8,36 +19,36 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-// codeBlockEnterCommands lists QDoc commands that begin a code block. Text
-// nodes following these commands (until the corresponding end command) are not
-// prose and must be excluded from prose reconstruction.
+// codeBlockEnterCommands lists QDoc commands that begin a verbatim code block.
+// Text nodes after these commands (until the matching end command) contain
+// source code, not prose, and must be excluded from reconstruction.
 var codeBlockEnterCommands = map[string]bool{
 	"code": true, "qml": true, "badcode": true, "snippet": true,
 }
 
-// codeBlockExitInlineTexts maps the inline_text portion that signals the end
-// of a code block. The tree-sitter QDoc grammar parses \endcode as the inline
-// command \e with argument "ndcode" (because "e" is an inline_command_name and
-// "nd..." is an inline_text), and similarly for \endqml and \endsnippet.
+// codeBlockExitInlineTexts maps the inline_text content that signals the end
+// of a code block. The QDoc grammar tokenizes \endcode as inline_command \e
+// with inline_text "ndcode" (because "e" is a recognized inline_command_name
+// and the rest becomes inline_text). Similarly: \endqml → "ndqml",
+// \endsnippet → "ndsnippet".
 var codeBlockExitInlineTexts = map[string]bool{
 	"ndcode": true, "ndqml": true, "ndsnippet": true,
 }
 
-// skipQDocProseUntilBlank contains QDoc commands whose content (spanning
-// inline-command boundaries until the first blank line) is linted separately
-// via their own CommandMatch scope (brief.line, note.line, warning.line).
-// qdocCollectProse skips all markup siblings after these commands until it
-// sees a \n\n boundary, then resumes prose collection. This prevents
-// scope: text rules from firing twice (once via lintLines on the .line
-// comment and once via lintProse on the reconstructed prose block).
+// skipQDocProseUntilBlank lists commands whose text content (until the first
+// blank line) is already linted via their own CommandMatch scope in Pass 1
+// (brief.line, note.line, warning.line). qdocCollectProse skips all siblings
+// after these commands until a \n\n boundary, then resumes. Without this,
+// scope:text rules would fire twice — once in Pass 1 and again in Pass 2.
 var skipQDocProseUntilBlank = map[string]bool{
 	"brief": true, "note": true, "warning": true,
 }
 
-// skipQDocProseArgs contains QDoc commands whose immediately-following text
-// node holds a structured argument (identifier, signature, or reference list)
-// rather than prose. Text nodes after these commands are excluded from prose
-// reconstruction so they don't contaminate NLP sentence splitting.
+// skipQDocProseArgs lists commands whose immediately-following text node holds
+// a structured argument (identifier, signature, or reference list) rather than
+// prose. These are excluded from reconstruction to avoid contaminating NLP
+// sentence splitting with non-prose content like "QNetworkReply" or
+// "int Calculator::add(int a, int b)".
 var skipQDocProseArgs = map[string]bool{
 	// Topic commands — argument is an identifier / signature.
 	"class": true, "enum": true, "fn": true, "property": true, "variable": true,
@@ -53,14 +64,19 @@ var skipQDocProseArgs = map[string]bool{
 // GetQDocProseBlocks parses source with the QDoc grammar and returns one
 // Comment per block_comment node whose reconstructed prose is non-empty.
 //
-// Unlike GetComments with the "(text) @comment" query, this function spans
-// inline-command boundaries so that sentences are never split mid-text by
-// inline markup (e.g. "\c{code}"). The result is suitable for lintProse,
-// enabling scope: sentence rules to fire on complete QDoc prose.
+// Unlike GetComments (which returns one Comment per text node, fragmenting
+// sentences at inline-command boundaries), this function walks all markup
+// siblings per block_comment and concatenates text + inline_command content
+// into continuous prose. The result is suitable for lintProse + NLP sentence
+// segmentation, enabling scope:sentence rules on complete QDoc prose.
 //
-// Note: comment.Line is set to the block_comment start line. When command
-// lines are skipped during reconstruction the reported line may be off by a
-// small amount; the matched text in each alert remains accurate.
+// Skipped content:
+//   - Code blocks (\code...\endcode, \qml...\endqml, \snippet...\endsnippet)
+//   - Topic-command arguments (\class, \fn, \property, etc.)
+//   - brief/note/warning text (linted separately in Pass 1 via CommandMatch)
+//
+// Newlines in skipped regions are preserved so prose line numbers stay aligned
+// with source line numbers for accurate alert positioning.
 func GetQDocProseBlocks(source []byte) ([]Comment, error) {
 	lang := QDoc()
 	parser := sitter.NewParser()
@@ -71,9 +87,9 @@ func GetQDocProseBlocks(source []byte) ([]Comment, error) {
 		return nil, err
 	}
 
-	// Use a query to find all block_comment nodes regardless of nesting depth.
-	// (The grammar wraps each block_comment in a comment node, so they are
-	// NOT direct children of source_file.)
+	// Use a query rather than iterating root children because the grammar wraps
+	// each block_comment inside a comment node: source_file → comment → block_comment.
+	// A query finds them at any depth.
 	q, qErr := sitter.NewQuery([]byte("(block_comment) @block"), lang.Parser)
 	if qErr != nil {
 		return nil, qErr
