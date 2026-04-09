@@ -20,18 +20,23 @@ import (
 )
 
 // codeBlockEnterCommands lists QDoc commands that begin a verbatim code block.
-// Text nodes after these commands (until the matching end command) contain
+// Text nodes after these commands (until the matching \end* command) contain
 // source code, not prose, and must be excluded from reconstruction.
+//
+// Note: \snippet is NOT included — it is a single-line command that includes
+// code from an external file and has no \endsnippet counterpart.
 var codeBlockEnterCommands = map[string]bool{
-	"code": true, "qml": true, "badcode": true, "snippet": true,
+	"code": true, "qml": true, "badcode": true,
 }
 
 // codeBlockExitCommands lists the command names (via macro_name) that end a
 // code block. The grammar parses \endcode as command → macro_name "endcode"
 // (not as a block_command pair), so qdocCollectProse must detect these in the
 // "command" case to clear the inCodeBlock flag.
+//
+// Per QDoc docs: \badcode is terminated by \endcode (not \endbadcode).
 var codeBlockExitCommands = map[string]bool{
-	"endcode": true, "endqml": true, "endsnippet": true, "endbadcode": true,
+	"endcode": true, "endqml": true,
 }
 
 // skipQDocProseUntilBlank lists commands whose text content (until the first
@@ -70,7 +75,7 @@ var skipQDocProseArgs = map[string]bool{
 // segmentation, enabling scope:sentence rules on complete QDoc prose.
 //
 // Skipped content:
-//   - Code blocks (\code...\endcode, \qml...\endqml, \snippet...\endsnippet)
+//   - Code blocks (\code...\endcode, \badcode...\endcode, \qml...\endqml)
 //   - Topic-command arguments (\class, \fn, \property, etc.)
 //   - brief/note/warning text (linted separately in Pass 1 via CommandMatch)
 //
