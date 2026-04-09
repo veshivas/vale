@@ -39,17 +39,19 @@ func TestQDocComments(t *testing.T) {
 	}
 }
 
-// TestQDocScopes checks that each capture kind produces the correct scope.
+// TestQDocScopes checks scopes not covered by TestQDocComments fixture tests:
+// \title scope, and \image/\inlineimage alt-text suppression.
+//
+// Brief, heading, note, warning, and image-without-alt scopes are already
+// validated by TestQDocComments via fixtures 6.qdoc and 8.qdoc.
 func TestQDocScopes(t *testing.T) {
 	src := []byte(`/*!
-    \class Foo
-    \brief A brief without a period
+    \page example.html
+    \title The Page Title
 
-    Some body text here.
+    \image has-alt.png This image has alt text.
 
-    \section1 A title-case Section Heading
-
-    More body text.
+    \inlineimage has-alt-inline.png {Inline alt text}
 */`)
 
 	comments, err := GetComments(src, QDoc())
@@ -57,39 +59,22 @@ func TestQDocScopes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Build a map of scope → texts for easy assertion.
-	byScope := map[string][]string{}
+	// \title must produce title scope.
+	found := false
 	for _, c := range comments {
-		byScope[c.Scope] = append(byScope[c.Scope], c.Text)
+		if c.Scope == "text.comment.title.line" && c.Text == "The Page Title" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected text.comment.title.line with text %q; got: %v", "The Page Title", comments)
 	}
 
-	cases := []struct {
-		scope string
-		want  string
-	}{
-		// \brief text captured in the brief scope, first line only.
-		{"text.comment.brief.line", "A brief without a period"},
-		// \section1 text captured in the heading scope, first line only.
-		{"text.comment.heading.line", "A title-case Section Heading"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.scope, func(t *testing.T) {
-			texts, ok := byScope[tc.scope]
-			if !ok {
-				t.Fatalf("no comment with scope %q; got scopes: %v", tc.scope, keys(byScope))
-			}
-			found := false
-			for _, text := range texts {
-				if text == tc.want {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("scope %q: want %q; got %v", tc.scope, tc.want, texts)
-			}
-		})
+	// \image and \inlineimage WITH alt text must NOT produce image scope.
+	for _, c := range comments {
+		if c.Scope == "text.comment.image.line" {
+			t.Errorf("image with alt text should not fire image scope; got %q", c.Text)
+		}
 	}
 }
 
@@ -133,10 +118,268 @@ func TestGetQDocProseBlocks(t *testing.T) {
 	}
 }
 
-func keys(m map[string][]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+// TestGetQDocProseBlocksCodeBlocks verifies that prose reconstruction correctly
+// excludes content inside \code...\endcode, \badcode...\endcode, and
+// \qml...\endqml blocks, and includes prose that follows them.
+func TestGetQDocProseBlocksCodeBlocks(t *testing.T) {
+	src := []byte(`/*!
+    \class Widget
+    \brief A test widget.
+
+    Prose before code block.
+
+    \code
+    int x = 1;
+    QString s = "hello";
+    \endcode
+
+    Prose after code block.
+
+    \badcode
+    $ make install
+    \endcode
+
+    Prose after badcode block.
+
+    \qml
+    import QtQuick 2.0
+    Item { width: 100 }
+    \endqml
+
+    Prose after qml block.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return out
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Prose around code blocks must be present.
+	for _, want := range []string{
+		"Prose before code block.",
+		"Prose after code block.",
+		"Prose after badcode block.",
+		"Prose after qml block.",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("expected prose %q not found in:\n%s", want, combined)
+		}
+	}
+
+	// Code block content must NOT be present.
+	for _, reject := range []string{
+		"int x = 1",
+		"make install",
+		"import QtQuick",
+	} {
+		if strings.Contains(combined, reject) {
+			t.Errorf("code block content %q should not appear in prose:\n%s", reject, combined)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksBlockCommands verifies that qdocCollectProse recurses
+// into prose-bearing block commands (\list, \legalese, \quotation) and skips
+// non-prose block commands (\raw, \table).
+func TestGetQDocProseBlocksBlockCommands(t *testing.T) {
+	src := []byte(`/*!
+    \class Container
+    \brief A container widget.
+
+    Intro prose.
+
+    \list
+    \li First item with prose.
+    \li Second item with prose.
+    \endlist
+
+    \legalese
+    Copyright notice text.
+    \endlegalese
+
+    \quotation
+    A famous quotation here.
+    \endquotation
+
+    \table
+    \header \li Column
+    \row \li Table cell data.
+    \endtable
+
+    \raw HTML
+    <p>Raw passthrough content.</p>
+    \endraw
+
+    Final prose after blocks.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Prose-bearing blocks: content must appear in reconstructed prose.
+	for _, want := range []string{
+		"First item with prose.",
+		"Second item with prose.",
+		"Copyright notice text.",
+		"A famous quotation here.",
+		"Final prose after blocks.",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("expected prose %q not found in:\n%s", want, combined)
+		}
+	}
+
+	// Non-prose blocks: content must NOT appear.
+	for _, reject := range []string{
+		"Table cell data",
+		"Raw passthrough content",
+	} {
+		if strings.Contains(combined, reject) {
+			t.Errorf("non-prose block content %q should not appear in prose:\n%s", reject, combined)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksSkipUntilBlank verifies that brief/note/warning text
+// (up to the first blank line) is excluded from prose reconstruction, since
+// it is linted separately via CommandMatch scopes in Pass 1. Prose after the
+// blank line must still be included.
+func TestGetQDocProseBlocksSkipUntilBlank(t *testing.T) {
+	src := []byte(`/*!
+    \class Receiver
+    \brief Handles incoming data packets.
+
+    Body prose after brief.
+
+    \note Always validate input before processing.
+
+    Prose after note.
+
+    \warning Do not call this from the main thread.
+
+    Prose after warning.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Brief/note/warning text must NOT appear (handled by Pass 1).
+	for _, reject := range []string{
+		"Handles incoming data packets",
+		"Always validate input",
+		"Do not call this from the main thread",
+	} {
+		if strings.Contains(combined, reject) {
+			t.Errorf("skipUntilBlank content %q should not appear in prose:\n%s", reject, combined)
+		}
+	}
+
+	// Prose after blank lines must be present.
+	for _, want := range []string{
+		"Body prose after brief.",
+		"Prose after note.",
+		"Prose after warning.",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("expected prose %q not found in:\n%s", want, combined)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksMacroNames verifies that commands parsed as macro_name
+// (custom macros like \macos, \QUL) do not suppress following prose text.
+// The grammar parses unknown commands as command → macro_name; these should
+// be treated as inert by qdocCollectProse (no skip flags set).
+func TestGetQDocProseBlocksMacroNames(t *testing.T) {
+	src := []byte(`/*!
+    \class Example
+    \brief A brief description.
+
+    This works on \macos and \linux platforms.
+    The \QUL framework handles rendering accordingly.
+    Final sentence after macros.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Prose around macros must be preserved.
+	if !strings.Contains(combined, "platforms") {
+		t.Errorf("expected 'platforms' in prose; got:\n%s", combined)
+	}
+	if !strings.Contains(combined, "rendering accordingly") {
+		t.Errorf("expected 'rendering accordingly' in prose; got:\n%s", combined)
+	}
+	if !strings.Contains(combined, "Final sentence after macros") {
+		t.Errorf("expected 'Final sentence after macros' in prose; got:\n%s", combined)
+	}
+}
+
+// TestGetQDocProseBlocksSnippet verifies that \snippet is treated as a
+// single-line command (not a code block). It should skip only its immediate
+// text argument, not suppress all following prose.
+func TestGetQDocProseBlocksSnippet(t *testing.T) {
+	src := []byte(`/*!
+    \class Loader
+    \brief Loads resources.
+
+    Use the loader as follows:
+    \snippet examples/loader.cpp setup
+    Prose after snippet should be included.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	if !strings.Contains(combined, "Prose after snippet should be included") {
+		t.Errorf("prose after \\snippet not found; got:\n%s", combined)
+	}
 }
