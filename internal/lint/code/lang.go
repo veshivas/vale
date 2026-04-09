@@ -36,6 +36,8 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 	case ".cpp":
 		return Cpp(), nil
 	case ".qdoc", ".qdocinc", ".qml":
+		// .qdoc/.qdocinc normally reach lintQDoc (format=markup), not lintCode.
+		// This case is hit when .qml is linted via lintCode (format=code).
 		return QDoc(), nil
 	case ".c":
 		return C(), nil

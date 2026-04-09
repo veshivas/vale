@@ -1,3 +1,16 @@
+// query.go contains the tree-sitter query execution engine used by GetComments
+// to extract scoped comment fragments from parsed source code.
+//
+// The engine supports two query modes:
+//   - run(): executes plain Expr queries (e.g. "(text) @comment"). Used by all
+//     languages for general comment extraction.
+//   - runCommandMatch(): finds commands matching a CommandMatch regex pattern
+//     and reconstructs their full text argument by walking markup siblings
+//     across inline-command boundaries. Currently used by QDoc for scoped
+//     extraction of \brief, \section, \note, \warning, and \title text.
+//
+// When both modes are active, run() accepts a skip set of consumed node start
+// bytes from runCommandMatch to avoid re-capturing the same text.
 package code
 
 import (
@@ -10,12 +23,15 @@ import (
 	"github.com/errata-ai/vale/v3/internal/core"
 )
 
+// QueryEngine executes tree-sitter queries against a parsed syntax tree and
+// returns Comment slices with scoped text suitable for Vale's lint pipeline.
 type QueryEngine struct {
 	tree   *sitter.Tree
 	lang   *Language
-	cutset string
+	cutset string // characters stripped from the left of each comment line
 }
 
+// NewQueryEngine creates a QueryEngine for the given parse tree and language.
 func NewQueryEngine(tree *sitter.Tree, lang *Language) *QueryEngine {
 	cutset := lang.Cutset
 	if cutset == "" {
@@ -29,6 +45,10 @@ func NewQueryEngine(tree *sitter.Tree, lang *Language) *QueryEngine {
 	}
 }
 
+// run executes a plain Expr query (e.g. "(text) @comment") and returns one
+// Comment per @comment capture. Nodes whose StartByte is in skip are excluded
+// — this is how CommandMatch results from Pass 1 prevent the catch-all query
+// in Pass 2 from re-capturing the same text and producing duplicate alerts.
 func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, skip map[uint32]bool) []Comment {
 	var comments []Comment
 
@@ -48,9 +68,11 @@ func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, ski
 
 		m = qc.FilterPredicates(m, source)
 		for _, c := range m.Captures {
+			// Only process @comment captures; skip helper captures like @_cmd.
 			if q.CaptureNameForId(c.Index) != "comment" {
 				continue
 			}
+			// Skip nodes already consumed by a CommandMatch query (Pass 1).
 			if skip[c.Node.StartByte()] {
 				continue
 			}
@@ -113,8 +135,16 @@ func extractInlineText(node *sitter.Node, source []byte) string {
 
 // collectCommandText walks markup siblings starting after markupNode and
 // returns the concatenated text content and the start bytes of all text/
-// inline_command nodes visited, spanning inline-command boundaries.
-// Collection stops when a block command or another top-level command is reached.
+// inline_command nodes visited. This spans inline-command boundaries so that
+// "\brief Use \c{write()} to send data" produces "Use write() to send data"
+// rather than just "Use".
+//
+// Collection stops when a block_command or another top-level command is
+// reached, which marks the boundary of the current command's text argument.
+//
+// The returned start bytes are used by GetComments to mark these nodes as
+// consumed, preventing the catch-all "(text) @comment" query from
+// re-capturing the same text.
 func collectCommandText(markupNode *sitter.Node, source []byte) (string, []uint32) {
 	var b strings.Builder
 	var consumed []uint32
@@ -150,10 +180,18 @@ func collectCommandText(markupNode *sitter.Node, source []byte) (string, []uint3
 // returns one Comment per match with the full text argument reconstructed by
 // walking markup siblings — including text across inline-command boundaries.
 //
-// Stopping behaviour:
+// Returns:
+//   - comments: one Comment per matched command with reconstructed text.
+//   - consumed: start bytes of all text/inline_command nodes visited during
+//     reconstruction. GetComments passes this to run() so the catch-all
+//     "(text) @comment" query skips these nodes.
+//
+// Text truncation:
 //   - UntilBlankLine (e.g. \brief, \note): collect until first \n\n.
 //   - Default (e.g. \section*, \title): keep only the first non-empty line.
 func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comment, map[uint32]bool, error) {
+	// Build a query that matches the command_name inside a block_comment.
+	// The tree-sitter #match? predicate filters by the CommandMatch regex.
 	expr := fmt.Sprintf(
 		`(block_comment (markup (command (command_name) @cmd (#match? @cmd "%s"))))`,
 		scope.CommandMatch,
@@ -190,7 +228,8 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 				continue
 			}
 
-			// Navigate up: command_name -> command -> markup
+			// Navigate up the AST: command_name → command → markup.
+			// We need the markup node to walk its siblings for text content.
 			commandNode := c.Node.Parent()
 			if commandNode == nil {
 				continue
@@ -200,7 +239,8 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 				continue
 			}
 
-			// Use the first text sibling's position for accurate line reporting.
+			// Report the alert at the text position, not the command position.
+			// Fall back to the command's markup node if no text sibling exists.
 			startRow := int(markupNode.StartPoint().Row)
 			startCol := int(markupNode.StartPoint().Column)
 			if first := markupNode.NextNamedSibling(); first != nil {
@@ -208,6 +248,9 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 				startCol = int(first.StartPoint().Column)
 			}
 
+			// Walk all markup siblings after the command, collecting text and
+			// inline_command content. Mark visited nodes as consumed so the
+			// catch-all pass in GetComments skips them.
 			cText, nodeBytes := collectCommandText(markupNode, source)
 			for _, b := range nodeBytes {
 				consumed[b] = true

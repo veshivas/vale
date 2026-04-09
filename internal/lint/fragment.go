@@ -1,3 +1,13 @@
+// fragment.go handles linting of markup embedded in code files, reached via
+// [formats] config (e.g. [formats] cpp = md, cpp = qdoc).
+//
+// lintFragments extracts comments from the code file using the source
+// language's tree-sitter grammar, then lints each comment's text through
+// the target markup handler (lintMarkdown, lintRST, lintADoc, lintOrg).
+//
+// For QDoc ([formats] cpp = qdoc), lintQDocFragments provides a specialized
+// path that routes /*!...*/ doc-comment blocks through the full two-pass
+// QDoc pipeline via lintQDocBlock.
 package lint
 
 import (
@@ -66,7 +76,9 @@ func (l *Linter) lintFragments(f *core.File) error {
 	}
 
 	// QDoc markup embedded in code files (.cpp, .qml via [formats] cpp = qdoc)
-	// needs the full QDoc two-pass pipeline rather than a markup→HTML converter.
+	// needs the full QDoc two-pass pipeline (heading/brief/prose scope support,
+	// BlockIgnores, sentence segmentation) rather than a markup→HTML converter.
+	// NormedExt is ".qdoc" here because [formats] mapped the original extension.
 	if f.NormedExt == ".qdoc" {
 		return l.lintQDocFragments(f, lang)
 	}
@@ -110,10 +122,10 @@ func (l *Linter) lintFragments(f *core.File) error {
 // blocks through the full QDoc two-pass pipeline, and processes regular
 // comments with lintLines.
 func (l *Linter) lintQDocFragments(f *core.File, lang *code.Language) error {
-	// Always use Cpp() for /*!...*/ boundary detection. Both .cpp and .qml
-	// use C-style doc comment delimiters, so Cpp() correctly identifies QDoc
-	// block boundaries regardless of the source language. The lang parameter
-	// is retained for adjustAlerts padding on regular (non-QDoc) comments.
+	// Use Cpp() to extract comments — both .cpp and .qml use C-style delimiters,
+	// so Cpp() correctly identifies /*!...*/ block boundaries. We cannot use
+	// QDoc() here because QDoc() has a different Delims regex (matches /*! and
+	// */ separately) and Queries designed for QDoc markup, not C++ source.
 	cppLang := code.Cpp()
 	comments, err := code.GetComments([]byte(f.Content), cppLang)
 	if err != nil {
