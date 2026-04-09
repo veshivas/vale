@@ -19,17 +19,17 @@ type Comment struct {
 	Scope  string
 }
 
-// doneMerging determines when we should *stop* concatenating line-scoped
-// comments.
+// doneMerging reports whether curr should NOT be merged with prev in coalesce.
+// Line-scoped comments are merged only when they are on consecutive lines at
+// the same column offset and share the same scope. The scope check prevents
+// comments with different scopes (e.g. a brief.line after a text.comment.line)
+// from being merged, which would lose their distinct scope identity.
 func doneMerging(curr, prev Comment) bool {
 	if prev.Scope != curr.Scope {
-		// Comments with different scopes must not be merged.
 		return true
 	} else if prev.Line != curr.Line-1 {
-		// If the comments aren't on consecutive lines, don't merge them.
 		return true
 	} else if prev.Offset != curr.Offset {
-		// If the comments aren't at the same offset, don't merge them.
 		return true
 	}
 	return false
@@ -51,6 +51,10 @@ func addSourceLine(line string, atEnd bool) string {
 	return line
 }
 
+// coalesce merges consecutive line-scoped comments into single Comments.
+// Block-scoped comments (.block suffix) are never merged — they are added
+// as independent entries. This merging is important for languages like C++
+// where consecutive // comments form a logical paragraph.
 func coalesce(comments []Comment) []Comment {
 	var joined []Comment
 
@@ -99,7 +103,20 @@ func coalesce(comments []Comment) []Comment {
 	return joined
 }
 
-// GetComments returns all comments in the given source code.
+// GetComments returns all comments in the given source code, extracted via
+// tree-sitter queries defined in the Language.
+//
+// When the Language defines CommandMatch queries, extraction uses two passes:
+//
+//	Pass 1 — CommandMatch queries: reconstructs full text arguments via
+//	         runCommandMatch. Records start bytes of consumed nodes.
+//	Pass 2 — Plain Expr queries: captures remaining text nodes, skipping
+//	         any already consumed by Pass 1 to prevent duplicates.
+//
+// For languages without CommandMatch queries, only Pass 2 runs.
+//
+// Results are sorted by line number and coalesced (consecutive line-scoped
+// comments at the same offset are merged into a single Comment).
 func GetComments(source []byte, lang *Language) ([]Comment, error) {
 	var comments []Comment
 
@@ -112,9 +129,8 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 	}
 	engine := NewQueryEngine(tree, lang)
 
-	// Pass 1: run all CommandMatch queries, collecting the set of text-node
-	// start bytes that they consume. These nodes must not be re-linted by the
-	// catch-all (text) query to prevent duplicate alerts for the same text.
+	// --- Pass 1: CommandMatch queries ---
+	// Collect consumed text-node start bytes so Pass 2 can skip them.
 	consumed := make(map[uint32]bool)
 	for _, query := range lang.Queries {
 		if query.CommandMatch == "" {
@@ -130,7 +146,7 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 		}
 	}
 
-	// Pass 2: run plain Expr queries, skipping any node already consumed above.
+	// --- Pass 2: plain Expr queries ---
 	for _, query := range lang.Queries {
 		if query.CommandMatch != "" {
 			continue
@@ -143,8 +159,8 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 	}
 
 	if len(lang.Queries) > 1 {
-		// Interleave Pass 1 (CommandMatch) and Pass 2 (Expr) results by line
-		// number so that coalesce sees comments in source order.
+		// Interleave Pass 1 and Pass 2 results by source order so coalesce
+		// can correctly merge consecutive line-scoped comments.
 		sort.SliceStable(comments, func(p, q int) bool {
 			return comments[p].Line < comments[q].Line
 		})
