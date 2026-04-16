@@ -33,6 +33,12 @@ type Scope struct {
 	// first line is kept. Set UntilBlankLine for multi-line commands.
 	CommandMatch   string `yaml:"command_match"`
 	UntilBlankLine bool   `yaml:"until_blank_line"` // collect text until first blank line (\n\n)
+	// ScopePrefix overrides the language-level ScopePrefix for this scope
+	// only. When set, the produced comment scope is "<ScopePrefix>.<Name>.line"
+	// instead of the default "text.comment.<Name>.line". Use this to assign a
+	// non-prose scope (e.g. "meta") so that text-scoped rules do not fire on
+	// content that is not prose (e.g. image filenames).
+	ScopePrefix string `yaml:"scope_prefix"`
 }
 
 // A View is a named, virtual representation of a subset of a file's

@@ -89,7 +89,9 @@ func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, ski
 			}
 
 			prefix := "text.comment"
-			if qe.lang.ScopePrefix != "" {
+			if scope.ScopePrefix != "" {
+				prefix = scope.ScopePrefix
+			} else if qe.lang.ScopePrefix != "" {
 				prefix = qe.lang.ScopePrefix
 			}
 			blkScope := prefix + meta + ".line"
@@ -254,7 +256,9 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 		meta = "." + meta
 	}
 	prefix := "text.comment"
-	if qe.lang.ScopePrefix != "" {
+	if scope.ScopePrefix != "" {
+		prefix = scope.ScopePrefix
+	} else if qe.lang.ScopePrefix != "" {
 		prefix = qe.lang.ScopePrefix
 	}
 	blkScope := prefix + meta + ".line"
