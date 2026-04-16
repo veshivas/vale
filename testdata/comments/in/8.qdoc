@@ -45,4 +45,7 @@
     See the \inlineimage icon-large.png {A large icon} diagram for reference.
 
     Final prose sentence after all blocks.
+
+    \target item-widget-overview
+    \keyword ItemWidget
 */

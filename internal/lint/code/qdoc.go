@@ -55,9 +55,18 @@ func QDoc() *Language {
 			// \title — single-line like headings.
 			{Name: "title", CommandMatch: `^title$`},
 
-			// Image commands missing alt text. The trailing-dot anchor (`. )`)
+			// Image commands missing alt text. The trailing-dot anchor (`. `)
 			// fires only when the filename is the last child, i.e. no alt text.
-			{Name: "image", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
+			// ScopePrefix "meta" produces "meta.image.line" instead of
+			// "text.comment.image.line" so that text-scoped rules (Vale.Terms,
+			// Microsoft.*) do not fire on image filenames; only Qt.QDocImageAlt
+			// (scoped to "meta.image") matches this scope.
+			{Name: "image", ScopePrefix: "meta", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
+
+			// \target and \keyword anchor identifiers. ScopePrefix "meta"
+			// prevents text-scoped rules from firing on anchor names; only rules
+			// explicitly scoped to "meta.anchor" (e.g. Qt.QDocAnchorAPIName) match.
+			{Name: "anchor", ScopePrefix: "meta", CommandMatch: `^(target|keyword)$`},
 		},
 		Padding: cStyle,
 	}
