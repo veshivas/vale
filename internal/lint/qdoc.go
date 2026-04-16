@@ -212,6 +212,16 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 			if err = l.lintProse(f, block, len(f.Lines)); err != nil {
 				return err
 			}
+		} else if !strings.HasPrefix(comment.Scope, "text") {
+			// Non-text scope (e.g. "meta.image.line"): use comment.Scope
+			// directly so the block scope is not prefixed with "text". This
+			// prevents text-scoped rules (Vale.Terms, Microsoft.*) from firing
+			// on non-prose content such as image filenames, while still
+			// allowing rules scoped specifically to "meta.image" to match.
+			block := nlp.NewBlock("", f.Content, comment.Scope+f.RealExt)
+			if err = l.lintBlock(f, block, len(f.Lines), 0, true); err != nil {
+				return err
+			}
 		} else {
 			// Headings and other single-line scopes: lintLines with lookup=true.
 			if err = l.lintLines(f); err != nil {
