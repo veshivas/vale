@@ -4,6 +4,20 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.14.2-qdocsupport-beta1] - 2026-04-16
+
+### Added
+
+- **Meta scopes for non-prose QDoc commands** — `\image`, `\inlineimage`, `\target`, and `\keyword` arguments now receive `meta.*` scopes (`meta.image.line`, `meta.anchor.line`) instead of the default `text.*` prefix. This prevents text-scoped rules (e.g. `Vale.Terms`, `Microsoft.*`) from firing on filenames and anchor identifiers that are not prose.
+
+### Fixed
+
+- **Code block exit detection broken by grammar upgrade** — The tree-sitter-qdoc grammar upgrade in alpha2 changed `\endcode`, `\endqml`, and similar terminators from `inline_command` nodes to `command → macro_name` nodes. `qdocCollectProse` now reads both `command_name` and `macro_name` children and uses an updated exit-command set, restoring correct code block boundary detection.
+
+- **Incorrect `\endsnippet` and `\endbadcode` exit markers removed** — `\badcode` is terminated by `\endcode` (not `\endbadcode`), and `\snippet` is a single-line inclusion command with no end counterpart. The stale entries have been removed from the exit map.
+
+---
+
 ## [v3.14.2-qdocsupport-alpha2] - 2026-04-07
 
 ### Added
