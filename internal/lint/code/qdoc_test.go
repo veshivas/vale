@@ -604,6 +604,94 @@ func TestGetQDocProseBlocksSectionWithMacroLineNumbers(t *testing.T) {
 //  10:      (blank)
 //  11:      Post-list prose.
 //  12:  */
+// TestGetQDocProseBlocksLinkCommand verifies link_command handling in
+// qdocCollectProse:
+//
+//  1. \l{target}{alias} — alias text appears in prose; target does not.
+//  2. \l{target}        — no alias; target does not appear (bare reference).
+//  3. Column accuracy   — text following either form aligns with source columns.
+//
+// Source layout (block_comment starts at source line 1):
+//
+//	1:  /*!
+//	2:  \class Foo
+//	3:  \brief A class.
+//	4:  (blank)
+//	5:  The \l{Qt Resource System}{Qt resource system} allows files to be stored.
+//	6:  (blank)
+//	7:  See \l{Qt::QObject} for details.
+//	8:  */
+func TestGetQDocProseBlocksLinkCommand(t *testing.T) {
+	src := []byte("/*!\n\\class Foo\n\\brief A class.\n\n" +
+		"The \\l{Qt Resource System}{Qt resource system} allows files to be stored.\n\n" +
+		"See \\l{Qt::QObject} for details.\n*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var allText string
+	for _, b := range blocks {
+		allText += b.Text
+	}
+
+	// --- Content checks ---
+
+	// Alias text must appear; target text must not.
+	if !strings.Contains(allText, "Qt resource system") {
+		t.Errorf("alias 'Qt resource system' not found in prose:\n%q", allText)
+	}
+	if strings.Contains(allText, "Qt Resource System") {
+		t.Errorf("target 'Qt Resource System' must not appear in prose:\n%q", allText)
+	}
+
+	// No-alias target must not appear.
+	if strings.Contains(allText, "Qt::QObject") {
+		t.Errorf("no-alias target 'Qt::QObject' must not appear in prose:\n%q", allText)
+	}
+
+	// --- Column accuracy checks ---
+	//
+	// \l{Qt Resource System}{Qt resource system} = 42 bytes
+	//   aliasOffset (len of \l{Qt Resource System}) = 22
+	//   emitted: 22 spaces + 1({) + "Qt resource system"(18) + 1(}) = 42
+	//   "allows" col (0-indexed): len("The ") + 42 + len(" ") = 47
+	//
+	// \l{Qt::QObject} = 15 bytes, no alias → blanked entirely
+	//   "for" col (0-indexed): len("See ") + 15 + len(" ") = 20
+	type colCheck struct {
+		lineSubstr string // unique substring to find the source line
+		word       string // word whose column to check
+		wantCol    int    // expected 0-indexed column
+	}
+	checks := []colCheck{
+		{"allows files", "allows", 47},
+		{"for details", "for", 20},
+	}
+	for _, c := range checks {
+		found := false
+		for _, b := range blocks {
+			for _, line := range strings.Split(b.Text, "\n") {
+				if strings.Contains(line, c.lineSubstr) {
+					col := strings.Index(line, c.word)
+					if col != c.wantCol {
+						t.Errorf("word %q: col %d, want %d\nline: %q", c.word, col, c.wantCol, line)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("line containing %q not found in prose:\n%q", c.lineSubstr, allText)
+		}
+	}
+}
+
 func TestGetQDocProseBlocksListLineNumbers(t *testing.T) {
 	src := []byte("/*!\n    \\class Foo\n    \\brief A foo.\n\n    Intro prose.\n    \\list\n    \\li First list item is set by default.\n    \\li Second list item is set to NEW.\n    \\endlist\n\n    Post-list prose.\n*/")
 
@@ -628,6 +716,85 @@ func TestGetQDocProseBlocksListLineNumbers(t *testing.T) {
 					gotLine := i + 1
 					if gotLine != wantLine {
 						t.Errorf("prose %q: line %d, want %d\nprose text:\n%q",
+							substr, gotLine, wantLine, b.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found in prose blocks", substr)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksTwoSections reproduces a line-shift bug seen in
+// profiling.qdoc where prose after the second \section1 lands one line early.
+//
+// Source layout (block_comment starts at line 1):
+//
+//	 1: /*!
+//	 2: \page test.html
+//	 3: \ingroup testgroup
+//	 4: \title Test Title
+//	 5: \brief Short brief for this page.
+//	 6: (blank)
+//	 7: \section1 First Section
+//	 8: (blank)
+//	 9: First section prose line one here.
+//	10: First section prose line two here.
+//	11: (blank)
+//	12: \section1 Second Section
+//	13: (blank)
+//	14: Second section prose starts here.
+//	15: Content can later be loaded here.
+//	16: */
+func TestGetQDocProseBlocksTwoSections(t *testing.T) {
+	// Reproduces the structure of profiling.qdoc: two \section1 headings,
+	// \l{target:colon}{alias} link commands, and \{macro}'s brace syntax.
+	src := []byte("/*!\n" +
+		"\\page test.html\n" +
+		"\\ingroup testgroup\n" +
+		"\\title Test Title\n" +
+		"\\brief Short brief for this page.\n" +
+		"\n" +
+		"\\section1 First Section\n" +
+		"\n" +
+		"With the \\l{QC: Some Page}{QML Profiler} you can analyze\n" +
+		"your code for issues. The tool is part of\n" +
+		"both \\QC and \\QDS. Use \\{QC}'s or \\{QDS}'s defaults.\n" +
+		"\n" +
+		"If building manually, enable the \\l{QML debugging infrastructure}.\n" +
+		"\n" +
+		"\\section1 Second Section\n" +
+		"\n" +
+		"Second section prose starts here.\n" +
+		"Content can later be loaded here.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Second section prose starts here.": 17,
+		"Content can later be loaded here.": 18,
+	}
+
+	for substr, wantLine := range want {
+		found := false
+		for _, b := range blocks {
+			lines := strings.Split(b.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: prose line %d, want %d\nprose text:\n%q",
 							substr, gotLine, wantLine, b.Text)
 					}
 					found = true

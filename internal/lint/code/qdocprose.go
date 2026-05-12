@@ -41,11 +41,17 @@ var codeBlockExitCommands = map[string]bool{
 
 // skipQDocProseUntilBlank lists commands whose text content (until the first
 // blank line) is already linted via their own CommandMatch scope in Pass 1
-// (brief.line, note.line, warning.line). qdocCollectProse skips all siblings
+// (brief.line, note.line, warning.line) or is a heading title that belongs
+// to a different scope (section headings). qdocCollectProse skips all content
 // after these commands until a \n\n boundary, then resumes. Without this,
-// scope:text rules would fire twice — once in Pass 1 and again in Pass 2.
+// scope:text rules would fire twice — once in Pass 1 and again in Pass 2 —
+// or heading argument text would be merged into the following prose paragraph,
+// causing spurious SentenceLength alerts.
 var skipQDocProseUntilBlank = map[string]bool{
 	"brief": true, "note": true, "warning": true,
+	// Section heading commands: argument is a heading title, not inline prose.
+	// Pass 1 lints heading titles via their own heading scope.
+	"section1": true, "section2": true, "section3": true, "section4": true,
 }
 
 // skipQDocProseArgs lists commands whose immediately-following text node holds
@@ -253,7 +259,13 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					skipUntilBlankLine = false
 					skipNextText = skipQDocProseArgs[cmdName]
 				}
-				// Emit content after the command keyword.
+				// Emit the command node with length-preserving blanks for
+				// the keyword prefix (\keyword) and any trailing content after
+				// the keyword (rest). Without blanking the keyword prefix, commands
+				// like \li (3 bytes) and \section2 (9 bytes) are silently dropped,
+				// shifting column positions of subsequent text and — for commands
+				// that occupy their own line — shifting line numbers as well.
+				//
 				// When TokenIgnore replaces \l{target} with length-preserving
 				// spaces, the grammar absorbs the replacement whitespace plus any
 				// leftover {alias} into the preceding command node's byte range
@@ -268,6 +280,22 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					if cn.Type() == "command_name" || cn.Type() == "macro_name" {
 						keywordEnd = cn.EndByte()
 						break
+					}
+				}
+				// Blank \keyword prefix bytes for length preservation,
+				// preserving any embedded newlines so that line numbers of
+				// subsequent prose remain correct. Normal command keywords
+				// (\li, \section2, etc.) contain no newlines, so this is a
+				// no-op for them. For unrecognised commands — e.g. \{QC}'s
+				// where no command_name child is found and keywordEnd ==
+				// child.EndByte() — the "keyword" may span multiple lines;
+				// preserving those newlines prevents the blank line between
+				// paragraphs from being silently dropped.
+				for i := child.StartByte(); i < keywordEnd; i++ {
+					if source[i] == '\n' {
+						b.WriteRune('\n')
+					} else {
+						b.WriteByte(' ')
 					}
 				}
 				if keywordEnd < child.EndByte() {
@@ -356,24 +384,67 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					}
 					break
 				}
-				// \l{target}{alias} — emit the alias (last inline_text child) as
-				// prose text. When the alias is a macro command rather than plain
-				// text, the inline_text child is absent; emit nothing for that case.
-				// The inter-markup gap tracking above handles the \n\n before \l.
-				var lastInlineText string
+				// \l{target} or \l{target}{alias}:
+				//   - Alias present (link_alias child): blank \l{target}{ bytes,
+				//     emit alias inner text, blank closing }. The alias IS display
+				//     prose and should be linted.
+				//   - No alias: \l{target} is a bare reference/identifier (e.g.
+				//     \l{qt_add_qml_module}, \l{QTP0001}). Blank the entire node
+				//     with length-preserving spaces so column positions of
+				//     subsequent text are not shifted.
+				//
+				// Note: \l is NOT in TokenIgnores. Pre-blanking \l before
+				// tree-sitter breaks link_command parsing (the grammar can no
+				// longer see the \l keyword), leaving an orphan {alias} brace_group
+				// that shifts all following column positions. Suppressing the target
+				// at the AST level is the correct approach — equivalent to how
+				// HTML-pipeline formats strip href values during format conversion.
+				var aliasNode *sitter.Node
 				for k := 0; k < int(child.NamedChildCount()); k++ {
-					ic := child.NamedChild(k)
-					if ic.Type() == "inline_text" {
-						t := strings.TrimSpace(ic.Content(source))
-						t = strings.TrimPrefix(t, "{")
-						t = strings.TrimSuffix(t, "}")
-						if t != "" {
-							lastInlineText = t
-						}
+					if cn := child.NamedChild(k); cn.Type() == "link_alias" {
+						aliasNode = cn
 					}
 				}
-				if lastInlineText != "" {
-					b.WriteString(lastInlineText)
+				if aliasNode == nil {
+					// No alias: blank entire node, preserving newlines.
+					for _, r := range child.Content(source) {
+						if r == '\n' {
+							b.WriteRune('\n')
+						} else {
+							b.WriteByte(' ')
+						}
+					}
+				} else {
+					// Alias present: blank \l{target}{ + emit alias text + blank }.
+					// aliasOffset is the byte distance from the node start to the
+					// alias's opening '{', positioning the alias text at exactly
+					// the right source column.
+					aliasOffset := int(aliasNode.StartByte() - child.StartByte())
+					for i := 0; i < aliasOffset; i++ {
+						b.WriteByte(' ')
+					}
+					aliasRaw := aliasNode.Content(source) // e.g. "{Qt resource system}"
+					b.WriteByte(' ')                      // blank opening {
+					if len(aliasRaw) >= 2 {
+						b.WriteString(aliasRaw[1 : len(aliasRaw)-1]) // emit inner text
+					}
+					b.WriteByte(' ') // blank closing }
+				}
+				skipNextText = false
+
+			default:
+				// Unknown or future node types (e.g. brace_group from a
+				// partially-blanked \l{target}{alias} where TokenIgnore erased
+				// \l{target} but left {alias} as an orphan). Emit
+				// length-preserving spaces so subsequent column positions in the
+				// reconstructed prose match the source. Newlines are preserved so
+				// line numbers stay aligned.
+				for _, r := range child.Content(source) {
+					if r == '\n' {
+						b.WriteRune('\n')
+					} else {
+						b.WriteByte(' ')
+					}
 				}
 				skipNextText = false
 			}
