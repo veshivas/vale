@@ -191,7 +191,8 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 		return err
 	}
 
-	last := len(f.Alerts)
+	initialLast := len(f.Alerts)
+	last := initialLast
 	for _, comment := range comments {
 		if strings.HasSuffix(comment.Scope, ".block") {
 			// Prose blocks are handled by Pass 2, which reconstructs complete
@@ -240,6 +241,8 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 		last = size
 	}
 
+	pass1End := len(f.Alerts)
+
 	// --- Pass 2: reconstructed prose blocks ---
 	proseBlocks, err := code.GetQDocProseBlocks([]byte(content))
 	if err != nil {
@@ -261,6 +264,41 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 			f.Alerts = adjustAlerts(f.Alerts, last, adj, lang)
 		}
 		last = size
+	}
+
+	// --- Dedup: remove Pass 1 alerts superseded by Pass 2 ---
+	//
+	// When inline markup (\e{not}, partially-blanked \l{target}{alias}) splits
+	// a \li item text node mid-line, the post-split fragment gets scope ".line"
+	// and is linted by Pass 1. Pass 2 reconstructs the full prose and lints
+	// the same content at a different (correct) column. Because f.history keys
+	// on line:col:check, the different columns prevent dedup, producing two
+	// alerts for one real issue.
+	//
+	// Fix: after both passes, for any (line, check, match) triple that appears
+	// in Pass 2, suppress the corresponding Pass 1 alert. Pass 2's column is
+	// authoritative because it is measured against the full reconstructed prose.
+	if pass1End > initialLast && len(f.Alerts) > pass1End {
+		type lcm struct {
+			line  int
+			check string
+			match string
+		}
+		pass2Set := make(map[lcm]bool, len(f.Alerts)-pass1End)
+		for _, a := range f.Alerts[pass1End:] {
+			pass2Set[lcm{a.Line, a.Check, a.Match}] = true
+		}
+		var filteredPass1 []core.Alert
+		for _, a := range f.Alerts[initialLast:pass1End] {
+			if !pass2Set[lcm{a.Line, a.Check, a.Match}] {
+				filteredPass1 = append(filteredPass1, a)
+			}
+		}
+		combined := make([]core.Alert, initialLast, initialLast+len(filteredPass1)+len(f.Alerts)-pass1End)
+		copy(combined, f.Alerts[:initialLast])
+		combined = append(combined, filteredPass1...)
+		combined = append(combined, f.Alerts[pass1End:]...)
+		f.Alerts = combined
 	}
 
 	return nil
