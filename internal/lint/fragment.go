@@ -48,10 +48,19 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 				padding += leadingSpaces(line, comment.Offset)
 			}
 
+			// comment.Offset is the source-column of the first content
+			// character on the opening line (e.g. 5 for "\note "). It only
+			// applies to alerts on line 1 of the comment text; subsequent
+			// lines start at column 0 in the source, so no offset is needed.
+			lineOffset := comment.Offset
+			if alerts[i].Line > 1 {
+				lineOffset = 0
+			}
+
 			alerts[i].Line += comment.Line - 1
 			alerts[i].Span = []int{
-				alerts[i].Span[0] + comment.Offset + padding,
-				alerts[i].Span[1] + comment.Offset + padding,
+				alerts[i].Span[0] + lineOffset + padding,
+				alerts[i].Span[1] + lineOffset + padding,
 			}
 		}
 	}
