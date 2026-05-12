@@ -199,7 +199,6 @@ func (f *File) FindLoc(ctx, s string, pad, count int, a Alert) (int, []int) {
 	} else {
 		lines = strings.SplitAfter(ctx, "\n")
 	}
-
 	counter := 0
 	for idx, l := range lines {
 		length = nlp.StrLen(l)

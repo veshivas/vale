@@ -149,15 +149,20 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 }
 
 // qdocCollectProse appends prose text from the markup children of node to b.
-// It handles the four markup child types:
+// It handles the five markup child types:
 //   - block_command: recurses into prose-bearing blocks (list, legalese, quotation);
 //     skips raw_block, table_block, and others without prose content.
-//   - command: checks command_name or macro_name to set state flags — entering/
-//     exiting code blocks, skipping topic-command arguments, or pausing until a
-//     blank line for brief/note/warning content.
+//   - command: sets state flags (code-block, skip-args, skip-until-blank) and
+//     emits any content after the command keyword. When TokenIgnore replaces
+//     \l{target} with length-preserving spaces, the remaining whitespace and
+//     {alias} become anonymous bytes in the preceding command node's byte range.
+//     Emitting them preserves both line-number alignment (\n\n after headings)
+//     and column accuracy ({alias} at the right offset in the source line).
 //   - text: appended when not suppressed by a skip or code-block flag.
 //   - inline_command: inline_text content appended with braces stripped
 //     (e.g. \c{write()} → "write()").
+//   - link_command: v0.2.1+ grammar node for \l{target}{alias}; emits the alias
+//     text (inline_text children) so prose is complete for NLP rules.
 func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	skipNextText := false
 	inCodeBlock := false
@@ -182,8 +187,40 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					inner := child.NamedChild(0)
 					switch inner.Type() {
 					case "list_block", "legalese_block", "quotation_block":
+						// Emit \n for source lines occupied by the opening keyword
+						// (\list, \legalese, \quotation) before recursing, and by
+						// the closing keyword (\endlist, \endlegalese, \endquotation)
+						// after recursing. Without this, prose line numbers inside
+						// the block are shifted N lines too early (N = number of
+						// keyword lines skipped), causing alerts to land on the wrong
+						// source line.
+						nc := int(inner.NamedChildCount())
+						if nc > 0 {
+							// Rows between block start and first markup child.
+							gapRows := int(inner.NamedChild(0).StartPoint().Row) - int(inner.StartPoint().Row)
+							for r := 0; r < gapRows; r++ {
+								b.WriteByte('\n')
+							}
+						}
 						qdocCollectProse(inner, source, b)
-					// raw_block, table_block: no prose, skip.
+						if nc > 0 {
+							// Rows between last markup child end and block end.
+							lastChild := inner.NamedChild(nc - 1)
+							gapRows := int(inner.EndPoint().Row) - int(lastChild.EndPoint().Row)
+							for r := 0; r < gapRows; r++ {
+								b.WriteByte('\n')
+							}
+						}
+					default:
+						// raw_block, table_block: no prose, but preserve newlines
+						// so that post-block prose alerts land on the correct source
+						// line. Without this, all subsequent alerts are shifted N
+						// lines too early (N = number of lines in the skipped block).
+						for _, r := range inner.Content(source) {
+							if r == '\n' {
+								b.WriteRune('\n')
+							}
+						}
 					}
 				}
 
@@ -215,6 +252,35 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				} else {
 					skipUntilBlankLine = false
 					skipNextText = skipQDocProseArgs[cmdName]
+				}
+				// Emit content after the command keyword.
+				// When TokenIgnore replaces \l{target} with length-preserving
+				// spaces, the grammar absorbs the replacement whitespace plus any
+				// leftover {alias} into the preceding command node's byte range
+				// as anonymous content. Emitting that content preserves:
+				//   - line-number alignment: \n\n after a macro heading
+				//   - column accuracy: {alias} text at the right source offset
+				// In suppressed regions (code block, skip-until-blank) only
+				// newlines are emitted so line numbers stay aligned.
+				keywordEnd := child.EndByte() // default: no trailing content
+				for k := 0; k < int(child.NamedChildCount()); k++ {
+					cn := child.NamedChild(k)
+					if cn.Type() == "command_name" || cn.Type() == "macro_name" {
+						keywordEnd = cn.EndByte()
+						break
+					}
+				}
+				if keywordEnd < child.EndByte() {
+					rest := source[keywordEnd:child.EndByte()]
+					if inCodeBlock || skipUntilBlankLine {
+						for _, r := range string(rest) {
+							if r == '\n' {
+								b.WriteRune('\n')
+							}
+						}
+					} else {
+						b.Write(rest) //nolint:errcheck
+					}
 				}
 
 			case "text":
@@ -254,8 +320,47 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				if inCodeBlock || skipUntilBlankLine {
 					break
 				}
-				// Extract inline_text content with braces stripped.
-				// e.g. \c{write()} → "write()", \b{bold text} → "bold text"
+				// Emit inline_command content with the command wrapper blanked so
+				// that byte positions in the reconstructed prose match the source.
+				// Without this, \e{not} (7 bytes) would emit only "not" (3 bytes),
+				// shifting every subsequent column by −4 and causing Pass 1 and
+				// Pass 2 to report the same alert at different columns, defeating
+				// the f.history deduplication that suppresses duplicate alerts.
+				//
+				// e.g. \e{not}      → "   not " (3 leading spaces + content + 1)
+				//      \b{bold text} → "   bold text " (same length as source)
+				//
+				// Note: \c{...} never reaches this case because \c is in
+				// TokenIgnores and is blanked before tree-sitter parsing.
+				raw := child.Content(source)
+				open := strings.Index(raw, "{")
+				close := strings.LastIndex(raw, "}")
+				if open >= 0 && close > open {
+					for i := 0; i <= open; i++ {
+						b.WriteByte(' ') // blank \cmd{ prefix
+					}
+					b.WriteString(raw[open+1 : close]) // emit inner text
+					b.WriteByte(' ')                   // blank } suffix
+				} else {
+					b.WriteString(raw) // fallback: no braces found
+				}
+				skipNextText = false
+
+			case "link_command":
+				if inCodeBlock || skipUntilBlankLine {
+					// Preserve newlines from skipped link content.
+					for _, r := range child.Content(source) {
+						if r == '\n' {
+							b.WriteRune('\n')
+						}
+					}
+					break
+				}
+				// \l{target}{alias} — emit the alias (last inline_text child) as
+				// prose text. When the alias is a macro command rather than plain
+				// text, the inline_text child is absent; emit nothing for that case.
+				// The inter-markup gap tracking above handles the \n\n before \l.
+				var lastInlineText string
 				for k := 0; k < int(child.NamedChildCount()); k++ {
 					ic := child.NamedChild(k)
 					if ic.Type() == "inline_text" {
@@ -263,9 +368,12 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 						t = strings.TrimPrefix(t, "{")
 						t = strings.TrimSuffix(t, "}")
 						if t != "" {
-							b.WriteString(t)
+							lastInlineText = t
 						}
 					}
+				}
+				if lastInlineText != "" {
+					b.WriteString(lastInlineText)
 				}
 				skipNextText = false
 			}
