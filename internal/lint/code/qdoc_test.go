@@ -383,3 +383,263 @@ func TestGetQDocProseBlocksSnippet(t *testing.T) {
 		t.Errorf("prose after \\snippet not found; got:\n%s", combined)
 	}
 }
+
+// TestGetQDocCommentsTableCellLineNumbers verifies that Pass 1 (GetComments)
+// reports alerts for passive voice inside \table cells at the correct source
+// line. BUG B: text nodes after \li include trailing \n + leading whitespace of
+// the next line, causing coalesce() to merge adjacent \li text nodes and
+// addSourceLine to insert a phantom blank line, shifting alerts by +1.
+func TestGetQDocCommentsTableCellLineNumbers(t *testing.T) {
+	src := []byte(`/*!
+    \class QPluginLoader
+    \brief Loads a plugin at run-time.
+
+    \table
+      \row
+        \li fileName
+        \li The plugin is loaded from this path on disk.
+      \row
+        \li isLoaded
+        \li Returns true if the plugin was loaded successfully.
+      \row
+        \li loadHints
+        \li Hints are used to control how the plugin is resolved.
+    \endtable
+
+    The loader is used to resolve symbols exported by the plugin.
+*/`)
+	// Source line numbers (1-indexed):
+	//   8: \li The plugin is loaded from this path on disk.
+	//  11: \li Returns true if the plugin was loaded successfully.
+	//  14: \li Hints are used to control how the plugin is resolved.
+	//  18: The loader is used to resolve symbols exported by the plugin.
+
+	comments, err := GetComments(src, QDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"The plugin is loaded from this path on disk.": 8,
+		"loaded successfully":                          11,
+		"control how the plugin is resolved":           14,
+	}
+
+	for substr, wantLine := range want {
+		var gotLine int
+		for _, c := range comments {
+			if strings.Contains(c.Text, substr) {
+				gotLine = c.Line
+				break
+			}
+		}
+		if gotLine == 0 {
+			t.Errorf("text containing %q not found in comments", substr)
+		} else if gotLine != wantLine {
+			t.Errorf("text %q: got line %d, want %d (BUG B off-by-one)", substr, gotLine, wantLine)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksTableLineNumbers verifies that Pass 2 (GetQDocProseBlocks)
+// preserves line offsets across a skipped \table block, so that prose after
+// \endtable is reported at the correct source line.
+//
+// BUG A: qdocCollectProse skips table_block without emitting newlines, shifting
+// all post-table alerts N lines too early (N = lines in table block).
+//
+// adjustAlerts computes source_line = prose_line + comment.Line - 1.
+// For a block_comment starting at line 1, comment.Line = 1, so:
+//   source_line = prose_line + 1 - 1 = prose_line.
+// The prose line of each sentence must therefore equal its source line.
+func TestGetQDocProseBlocksTableLineNumbers(t *testing.T) {
+	src := []byte(`/*!
+    \class QPluginLoader
+    \brief Loads a plugin at run-time.
+
+    \table
+      \header
+        \li Property \li Behavior
+      \row
+        \li fileName
+        \li The plugin is loaded from this path on disk.
+      \row
+        \li isLoaded
+        \li Returns true if the plugin was loaded successfully.
+    \endtable
+
+    The loader is used to resolve symbols exported by the plugin.
+*/`)
+	// Source line layout (1-indexed):
+	//   1: /*!
+	//   2:     \class QPluginLoader
+	//   3:     \brief Loads a plugin at run-time.
+	//   4:     (blank)
+	//   5-14:  \table ... \endtable  (10 lines)
+	//  15:     (blank)
+	//  16:     The loader is used to resolve symbols exported by the plugin.
+	//  17: */
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const wantSubstr = "The loader is used"
+	const wantLine = 16 // source line; equals prose line since comment.Line = 1
+
+	for _, b := range blocks {
+		if !strings.Contains(b.Text, wantSubstr) {
+			continue
+		}
+		lines := strings.Split(b.Text, "\n")
+		gotLine := -1
+		for i, l := range lines {
+			if strings.Contains(l, wantSubstr) {
+				gotLine = i + 1 // 1-indexed
+				break
+			}
+		}
+		if gotLine != wantLine {
+			t.Errorf("post-table prose %q: prose line %d, want %d (BUG A line shift)\nprose text:\n%q",
+				wantSubstr, gotLine, wantLine, b.Text)
+		}
+		return
+	}
+	t.Errorf("post-table prose %q not found in prose blocks", wantSubstr)
+}
+
+// TestGetQDocProseBlocksSectionWithMacroLineNumbers verifies that Pass 2
+// (GetQDocProseBlocks) preserves correct line offsets when \section1 headings
+// end with a custom macro command. This tests for a regression where Fix A1
+// (default case in block_command switch) incorrectly shifted prose lines -2
+// per section heading.
+//
+// Source line layout (1-indexed, block_comment starts at line 1):
+//   1: /*!
+//   2:     \class QRuntimeLoader
+//   3:     \brief Loads resources at run-time.
+//   4:     (blank)
+//   5:     \section1 Startup behavior on \MACRO1
+//   6:     (blank)
+//   7:     \l{QObject}{QObjects} are initialized when the application starts.
+//   8:     All components are loaded from the resource bundle automatically.
+//   9:     (blank)
+//  10:     \section1 Shutdown with \BUILDVAR
+//  11:     (blank)
+//  12:     \l{QObject::deleteLater()}{deleteLater()} is called before the loop.
+//  13:     All resources are released when the object is destroyed.
+//  14: */
+//
+// comment.Line = 1 (block starts at row 0), so source_line = prose_line.
+func TestGetQDocProseBlocksSectionWithMacroLineNumbers(t *testing.T) {
+	src := []byte(`/*!
+    \class QRuntimeLoader
+    \brief Loads resources at run-time.
+
+    \section1 Startup behavior on \MACRO1
+
+    \l{QObject}{QObjects} are initialized when the application starts.
+    All components are loaded from the resource bundle automatically.
+
+    \section1 Shutdown with \BUILDVAR
+
+    \l{QObject::deleteLater()}{deleteLater()} is called before the loop.
+    All resources are released when the object is destroyed.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"are initialized when the application starts": 7,
+		"All components are loaded":                   8,
+		"is called before the loop":                   12,
+		"All resources are released":                  13,
+	}
+
+	for substr, wantLine := range want {
+		found := false
+		for _, b := range blocks {
+			lines := strings.Split(b.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1 // prose line (= source line since comment.Line=1)
+					if gotLine != wantLine {
+						t.Errorf("prose %q: line %d, want %d\nprose text:\n%q",
+							substr, gotLine, wantLine, b.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found in prose blocks", substr)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksListLineNumbers verifies that list_block newline
+// preservation keeps prose line numbers aligned with source lines after a
+// \list...\endlist block. The \list and \endlist keyword lines each occupy one
+// source line, so they must contribute \n chars to the prose string even though
+// they contain no prose text.
+//
+// Source layout (block_comment starts at line 1, so source_line = prose_line):
+//   1:  /*!
+//   2:      \class Foo
+//   3:      \brief A foo.
+//   4:      (blank)
+//   5:      Intro prose.
+//   6:      \list
+//   7:      \li First list item is set by default.
+//   8:      \li Second list item is set to NEW.
+//   9:      \endlist
+//  10:      (blank)
+//  11:      Post-list prose.
+//  12:  */
+func TestGetQDocProseBlocksListLineNumbers(t *testing.T) {
+	src := []byte("/*!\n    \\class Foo\n    \\brief A foo.\n\n    Intro prose.\n    \\list\n    \\li First list item is set by default.\n    \\li Second list item is set to NEW.\n    \\endlist\n\n    Post-list prose.\n*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Intro prose.":                       5,
+		"First list item is set by default.": 7,
+		"Second list item is set to NEW.":    8,
+		"Post-list prose.":                   11,
+	}
+
+	for substr, wantLine := range want {
+		found := false
+		for _, b := range blocks {
+			lines := strings.Split(b.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: line %d, want %d\nprose text:\n%q",
+							substr, gotLine, wantLine, b.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found in prose blocks", substr)
+		}
+	}
+}
