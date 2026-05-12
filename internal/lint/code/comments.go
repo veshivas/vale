@@ -32,6 +32,16 @@ func doneMerging(curr, prev Comment) bool {
 	} else if prev.Offset != curr.Offset {
 		return true
 	}
+	// A text node whose raw Source spans a line boundary with trailing content
+	// after the newline was produced by a greedy grammar rule that consumed
+	// leading whitespace from the next source line. Merging it with the following
+	// node inserts a phantom blank line in addSourceLine, shifting alert lines.
+	// This arises in QDoc table and list cells whose text nodes include trailing
+	// indentation. Single-line code comments (// ...\n) end with just \n and are
+	// not affected: for them idx == len(Source)-1, so the condition is false.
+	if idx := strings.Index(prev.Source, "\n"); idx >= 0 && idx < len(prev.Source)-1 {
+		return true
+	}
 	return false
 }
 

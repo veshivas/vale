@@ -120,7 +120,9 @@ func applyQDocPatterns(c *core.Config, normedExt, realExt, content string) (stri
 				return content, core.NewE201FromTarget(errc.Error(), r, c.Flags.Path)
 			}
 			var rerr error
-			content, rerr = pat.Replace(content, " ", 0, -1)
+			content, rerr = pat.ReplaceFunc(content, func(m regexp2.Match) string {
+				return blankNonNewlines(m.String())
+			}, 0, -1)
 			if rerr != nil {
 				return content, core.NewE201FromTarget(rerr.Error(), r, c.Flags.Path)
 			}

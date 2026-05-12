@@ -49,9 +49,16 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "First item with prose text.\n    \nSecond item with more prose.\n    \n",
-        "Source": " First item with prose text.\n    \nSecond item with more prose.\n    \n",
+        "Text": "First item with prose text.\n    ",
+        "Source": " First item with prose text.\n    ",
         "Line": 17,
+        "Offset": 7,
+        "Scope": "text.comment.line"
+    },
+    {
+        "Text": "Second item with more prose.\n    ",
+        "Source": " Second item with more prose.\n    ",
+        "Line": 18,
         "Offset": 7,
         "Scope": "text.comment.line"
     },
