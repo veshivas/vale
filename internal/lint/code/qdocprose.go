@@ -156,8 +156,8 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 
 // qdocCollectProse appends prose text from the markup children of node to b.
 // It handles the five markup child types:
-//   - block_command: recurses into prose-bearing blocks (list, legalese, quotation);
-//     skips raw_block, table_block, and others without prose content.
+//   - block_command: recurses into prose-bearing blocks (list, table, legalese, quotation);
+//     skips raw_block and others without prose content.
 //   - command: sets state flags (code-block, skip-args, skip-until-blank) and
 //     emits any content after the command keyword. When TokenIgnore replaces
 //     \l{target} with length-preserving spaces, the remaining whitespace and
@@ -192,14 +192,13 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				if child.NamedChildCount() > 0 {
 					inner := child.NamedChild(0)
 					switch inner.Type() {
-					case "list_block", "legalese_block", "quotation_block":
+					case "list_block", "table_block", "legalese_block", "quotation_block":
 						// Emit \n for source lines occupied by the opening keyword
-						// (\list, \legalese, \quotation) before recursing, and by
-						// the closing keyword (\endlist, \endlegalese, \endquotation)
-						// after recursing. Without this, prose line numbers inside
-						// the block are shifted N lines too early (N = number of
-						// keyword lines skipped), causing alerts to land on the wrong
-						// source line.
+						// (\list, \table, \legalese, \quotation) before recursing,
+						// and by the closing keyword after recursing. Without this,
+						// prose line numbers inside the block are shifted N lines too
+						// early (N = number of keyword lines skipped), causing alerts
+						// to land on the wrong source line.
 						nc := int(inner.NamedChildCount())
 						if nc > 0 {
 							// Rows between block start and first markup child.
