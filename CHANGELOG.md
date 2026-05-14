@@ -4,6 +4,24 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.14.2-qdoc-rc1] - 2026-05-14
+
+### Fixed
+
+- **Duplicate alerts between Pass 1 and Pass 2** — When a `\brief`, `\note`, or `\warning` block was linted by both the scoped pass (Pass 1) and the prose-reconstruction pass (Pass 2), identical alerts were emitted twice. Resolved by building a `(line, check, match)` keyed set from Pass 2 results and suppressing matching Pass 1 alerts in `runQDocPasses`.
+
+- **Section heading arguments polluting prose** — `\section1`–`\section4` heading text was included in the prose output of `qdocCollectProse`, causing the following paragraph's word count to be inflated and triggering spurious `Microsoft.SentenceLength` alerts. Section heading commands are now in the `skipQDocProseUntilBlank` map; their arguments are excluded from prose reconstruction.
+
+- **Command keyword bytes causing line/column shifts** — `qdocCollectProse` was emitting the command keyword (e.g. `\li`, `\section2`) as literal text before blanking it, shifting the column positions of all subsequent tokens on that line. The keyword bytes are now replaced with length-preserving spaces, keeping positions aligned.
+
+- **Unrecognized command nodes (`\{QC}` style) dropping newlines** — Multi-line unrecognized command nodes (parsed as a single node covering their full content) had all bytes replaced with spaces, losing embedded newlines. This caused subsequent prose paragraphs to be joined, wrong line numbers, and missing blank-line paragraph boundaries. The blanking loop now preserves `\n` characters.
+
+- **`\l` link command column accuracy** — `\l{target}{alias}` and `\l{target}` link commands were listed in `TokenIgnores`, which blanked the entire token before column positions were assigned, causing incorrect `Span` values for alerts in the surrounding sentence. These commands are now handled at the AST level in `qdocCollectProse`: alias text is emitted at the correct byte position; no-alias bare targets are fully blanked.
+
+- **Multi-line note/warning column offset applied to all lines** — `adjustAlerts` was applying `comment.Offset` (the source-column of the first content character) to every alert line in a multi-line `\note` or `\warning` block. The offset now applies only to alerts on line 1 of the comment text; subsequent lines start at column 0 in the source.
+
+---
+
 ## [v3.14.2-qdocsupport-beta1] - 2026-04-16
 
 ### Added
