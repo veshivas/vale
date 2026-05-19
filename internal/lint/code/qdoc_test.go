@@ -187,8 +187,8 @@ func TestGetQDocProseBlocksCodeBlocks(t *testing.T) {
 }
 
 // TestGetQDocProseBlocksBlockCommands verifies that qdocCollectProse recurses
-// into prose-bearing block commands (\list, \legalese, \quotation) and skips
-// non-prose block commands (\raw, \table).
+// into prose-bearing block commands (\list, \table, \legalese, \quotation) and
+// skips non-prose block commands (\raw).
 func TestGetQDocProseBlocksBlockCommands(t *testing.T) {
 	src := []byte(`/*!
     \class Container
@@ -240,6 +240,7 @@ func TestGetQDocProseBlocksBlockCommands(t *testing.T) {
 		"Second item with prose.",
 		"Copyright notice text.",
 		"A famous quotation here.",
+		"Table cell data.",
 		"Final prose after blocks.",
 	} {
 		if !strings.Contains(combined, want) {
@@ -247,14 +248,9 @@ func TestGetQDocProseBlocksBlockCommands(t *testing.T) {
 		}
 	}
 
-	// Non-prose blocks: content must NOT appear.
-	for _, reject := range []string{
-		"Table cell data",
-		"Raw passthrough content",
-	} {
-		if strings.Contains(combined, reject) {
-			t.Errorf("non-prose block content %q should not appear in prose:\n%s", reject, combined)
-		}
+	// \raw block: content must NOT appear (raw passthrough, not prose).
+	if strings.Contains(combined, "Raw passthrough content") {
+		t.Errorf("raw block content should not appear in prose:\n%s", combined)
 	}
 }
 
@@ -810,3 +806,401 @@ func TestGetQDocProseBlocksTwoSections(t *testing.T) {
 		}
 	}
 }
+
+// TestGetQDocProseBlocksSectionArgLineNumbers reproduces the qt-edu-for-designers.qdoc
+// structure: two \section1 headings with a numeric argument (e.g. "9." / "10."),
+// an \image command between sections, and prose after the second section heading.
+//
+// Source layout (comment.Line = 1):
+//
+//	 1: /*!
+//	 2:     \section1 9. Finish the installation
+//	 3:
+//	 4:     Select something here.
+//	 5:
+//	 6:     \image some-image.png
+//	 7:
+//	 8:     Select another thing.
+//	 9:
+//	10:     \section1 10. Open Qt Design Studio
+//	11:
+//	12:     Go to the folder to see the tools that were installed.
+//	13:     Qt Design Studio is located under its own folder.
+//	14: */
+func TestGetQDocProseBlocksSectionArgLineNumbers(t *testing.T) {
+	src := []byte("/*!\n" +
+		"    \\section1 9. Finish the installation\n" +
+		"\n" +
+		"    Select something here.\n" +
+		"\n" +
+		"    \\image some-image.png\n" +
+		"\n" +
+		"    Select another thing.\n" +
+		"\n" +
+		"    \\section1 10. Open Qt Design Studio\n" +
+		"\n" +
+		"    Go to the folder to see the tools that were installed.\n" +
+		"    Qt Design Studio is located under its own folder.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Go to the folder to see the tools that were installed.": 12,
+		"Qt Design Studio is located under its own folder.":      13,
+	}
+
+	for substr, wantLine := range want {
+		found := false
+		for _, blk := range blocks {
+			lines := strings.Split(blk.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: prose line %d, want %d\nprose text:\n%q",
+							substr, gotLine, wantLine, blk.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found in prose blocks", substr)
+		}
+	}
+}
+
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// TestGetQDocProseBlocksIncludeNewlines checks that \include commands
+// do not drop newlines from the reconstructed prose buffer.
+func TestGetQDocProseBlocksIncludeNewlines(t *testing.T) {
+	// Reproduces qt-edu-for-designers.qdoc: \include with brace args on a line,
+	// followed by a blank line, then prose.
+	//
+	//  1: /*!
+	//  2:     \include foo.qdocinc {arg1} {arg2}
+	//  3:
+	//  4:     Prose here on line four.
+	//  5: */
+	src := []byte("/*!\n" +
+		"    \\include foo.qdocinc {arg1} {arg2}\n" +
+		"\n" +
+		"    Prose here on line four.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Prose here on line four.": 4,
+	}
+	for substr, wantLine := range want {
+		found := false
+		for _, blk := range blocks {
+			lines := strings.Split(blk.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: prose line %d, want %d\nprose:\n%q", substr, gotLine, wantLine, blk.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found", substr)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksQDocMarkers checks that //! [snippet] markers inside
+// block comments do not drop newlines.
+func TestGetQDocProseBlocksQDocMarkers(t *testing.T) {
+	// Structure matches qt-edu-for-designers.qdoc lines 8-17:
+	//
+	//  1: /*!
+	//  2: //! [intro]
+	//  3:     Prose line three.
+	//  4: //! [intro]
+	//  5:
+	//  6:     Prose line six.
+	//  7: */
+	src := []byte("/*!\n" +
+		"//! [intro]\n" +
+		"    Prose line three.\n" +
+		"//! [intro]\n" +
+		"\n" +
+		"    Prose line six.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Prose line three.": 3,
+		"Prose line six.":   6,
+	}
+	for substr, wantLine := range want {
+		found := false
+		for _, blk := range blocks {
+			lines := strings.Split(blk.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: prose line %d, want %d\nprose:\n%q", substr, gotLine, wantLine, blk.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found", substr)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksFullDesignersStructure builds a close approximation of
+// qt-edu-for-designers.qdoc to find which construct drops 3 newlines before
+// the prose after the second \section1.
+func TestGetQDocProseBlocksCrossLineLink(t *testing.T) {
+	// Mirrors qt-edu-for-designers.qdoc lines 4-43 (comment.Line=4 in source,
+	// but here comment.Line=1 since block starts at row 0).
+	src := []byte("/*!\n" +
+		"    \\page qt-edu-for-designers.html\n" +
+		"    \\title Qt Edu for Designers\n" +
+		"\n" +
+		"//! [intro]\n" +
+		"    \\e {Qt Edu for Designers} package contains \\l {Qt Design Studio Manual}\n" +
+		"    {Qt Design Studio Enterprise}, allowing you to import.\n" +
+		"//! [intro]\n" +
+		"\n" +
+		"    These instructions walk you through the installation.\n" +
+		"\n" +
+		"    \\include qt-edu-steps.qdocinc {qt-edu-common-steps} {Qt Design Studio}\n" +
+		"\n" +
+		"    \\image qt-edu-install-design-studio.png\n" +
+		"\n" +
+		"    With \\e {Qt Edu for Designers} license, you get access to Qt Design\n" +
+		"    Studio. Select the \\uicontrol {Design Tools} shortcut to install.\n" +
+		"\n" +
+		"    Select \\uicontrol {Next}.\n" +
+		"\n" +
+		"    \\include qt-edu-steps.qdocinc qt-edu-license-agreement\n" +
+		"\n" +
+		"    \\section1 9. Finish the installation\n" +
+		"\n" +
+		"    Select \\uicontrol {Install} to start the installation process.\n" +
+		"\n" +
+		"    Once installation is complete, you'll see the screen.\n" +
+		"\n" +
+		"    \\image qt-edu-install-finish-design-studio.png\n" +
+		"\n" +
+		"    Select \\uicontrol {Finish} to exit the installer.\n" +
+		"\n" +
+		"    \\section1 10. Open Qt Design Studio\n" +
+		"\n" +
+		"    Go to the folder to see the tools that were installed.\n" +
+		"    Qt Design Studio is located under its own folder.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// With comment.Line=1, prose line == source line within this block.
+	// "\section1 10..." is on line 33, blank on 34, prose on 35-36.
+	want := map[string]int{
+		"Go to the folder to see the tools that were installed.": 35,
+		"Qt Design Studio is located under its own folder.":      36,
+	}
+	for substr, wantLine := range want {
+		found := false
+		for _, blk := range blocks {
+			lines := strings.Split(blk.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: prose line %d, want %d\nprose (lines 34-42):\n%s",
+							substr, gotLine, wantLine,
+							strings.Join(lines[max(0, 33):min(42, len(lines))], "\n"))
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found", substr)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksSectionNewlineBisect bisects the full-designers-structure
+// test to find which construct drops the remaining newline after the link fix.
+func TestGetQDocProseBlocksSectionNewlineBisect(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		substr   string
+		wantLine int
+	}{
+		{
+			name: "link_only",
+			src: "/*!\n" +
+				"    \\l {Qt Design Studio Manual}\n" +
+				"    {Qt Design Studio Enterprise}, rest.\n" +
+				"\n" +
+				"    Prose on line five.\n" +
+				"*/",
+			substr: "Prose on line five.", wantLine: 5,
+		},
+		{
+			name: "include_then_section",
+			src: "/*!\n" +
+				"    \\include foo.qdocinc {arg1} {arg2}\n" +
+				"\n" +
+				"    \\section1 9. Finish\n" +
+				"\n" +
+				"    Select something.\n" +
+				"\n" +
+				"    \\section1 10. Open\n" +
+				"\n" +
+				"    Prose on line ten.\n" +
+				"*/",
+			substr: "Prose on line ten.", wantLine: 10,
+		},
+		{
+			name: "link_then_section",
+			src: "/*!\n" +
+				"    \\l {Manual}\n" +
+				"    {Enterprise}, rest.\n" +
+				"\n" +
+				"    \\section1 9. Finish\n" +
+				"\n" +
+				"    Select something.\n" +
+				"\n" +
+				"    \\section1 10. Open\n" +
+				"\n" +
+				"    Prose on line eleven.\n" +
+				"*/",
+			substr: "Prose on line eleven.", wantLine: 11,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			blocks, err := GetQDocProseBlocks([]byte(tc.src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, blk := range blocks {
+				lines := strings.Split(blk.Text, "\n")
+				for i, l := range lines {
+					if strings.Contains(l, tc.substr) {
+						gotLine := i + 1
+						if gotLine != tc.wantLine {
+							t.Errorf("prose %q: prose line %d, want %d\nfull prose:\n%q",
+								tc.substr, gotLine, tc.wantLine, blk.Text)
+						}
+						return
+					}
+				}
+			}
+			t.Errorf("prose %q not found", tc.substr)
+		})
+	}
+}
+
+// TestGetQDocProseBlocksLinkDebug dumps the raw prose buffer for a cross-line link.
+func TestGetQDocProseBlocksLinkDebug(t *testing.T) {
+	src := []byte("/*!\n" +
+		"    \\l {Qt Design Studio Manual}\n" +
+		"    {Qt Design Studio Enterprise}, rest.\n" +
+		"\n" +
+		"    Prose on line five.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, b := range blocks {
+		t.Logf("block[%d] raw prose (lines annotated):", i)
+		for j, l := range strings.Split(b.Text, "\n") {
+			t.Logf("  L%02d: %q", j+1, l)
+		}
+	}
+}
+
+// TestGetQDocProseBlocksLinkRawLines calls GetQDocProseBlocks on a simple
+// cross-line \l command and prints the clean prose lines for manual inspection.
+func TestGetQDocProseBlocksLinkRawLines(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "same_line_link",
+			src:  "/*!\n    \\l {Manual} {Alias}, rest.\n\n    Prose line three.\n*/",
+		},
+		{
+			name: "cross_line_link",
+			src:  "/*!\n    \\l {Manual}\n    {Alias}, rest.\n\n    Prose line four.\n*/",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			blocks, err := GetQDocProseBlocks([]byte(tc.src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, blk := range blocks {
+				for j, l := range strings.Split(blk.Text, "\n") {
+					t.Logf("L%02d: %q", j+1, l)
+				}
+			}
+		})
+	}
+}
+
