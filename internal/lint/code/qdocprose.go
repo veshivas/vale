@@ -414,20 +414,39 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 						}
 					}
 				} else {
-					// Alias present: blank \l{target}{ + emit alias text + blank }.
-					// aliasOffset is the byte distance from the node start to the
-					// alias's opening '{', positioning the alias text at exactly
-					// the right source column.
-					aliasOffset := int(aliasNode.StartByte() - child.StartByte())
-					for i := 0; i < aliasOffset; i++ {
+					// Alias present: blank \l{target}[ ]{alias} with column and line
+					// accuracy. The link_alias token includes any whitespace between
+					// target and '{', so aliasNode.Content may be " {Alias}" (same
+					// line) or "\n    {Alias}" (next line). Find the '{' within the
+					// alias content so we blank the right bytes and preserve '\n'.
+					aliasRaw := aliasNode.Content(source)
+					braceOffset := strings.IndexByte(aliasRaw, '{')
+					if braceOffset < 0 || len(aliasRaw)-braceOffset < 2 {
+						// Degenerate: no '{' found — blank the whole node.
+						for i := child.StartByte(); i < child.EndByte(); i++ {
+							if source[i] == '\n' {
+								b.WriteRune('\n')
+							} else {
+								b.WriteByte(' ')
+							}
+						}
+					} else {
+						// Blank from child start through (and including) the '{'.
+						// This covers: \l, target brace-group, any inter-token
+						// whitespace, and the alias opening brace.
+						aliasBrace := aliasNode.StartByte() + uint32(braceOffset)
+						for i := child.StartByte(); i <= aliasBrace; i++ {
+							if source[i] == '\n' {
+								b.WriteRune('\n')
+							} else {
+								b.WriteByte(' ')
+							}
+						}
+						// Emit alias inner text.
+						b.WriteString(aliasRaw[braceOffset+1 : len(aliasRaw)-1])
+						// Blank closing '}'.
 						b.WriteByte(' ')
 					}
-					aliasRaw := aliasNode.Content(source) // e.g. "{Qt resource system}"
-					b.WriteByte(' ')                      // blank opening {
-					if len(aliasRaw) >= 2 {
-						b.WriteString(aliasRaw[1 : len(aliasRaw)-1]) // emit inner text
-					}
-					b.WriteByte(' ') // blank closing }
 				}
 				skipNextText = false
 
