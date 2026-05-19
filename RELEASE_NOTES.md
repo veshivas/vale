@@ -1,4 +1,4 @@
-# v3.14.2-qdoc-rc1
+# v3.14.2-qdoc-rc2
 
-*   [`641e03d6`](https://github.com/veshivas/vale/commit/641e03d6) fix(qdoc): correct link_command handling and suppress Pass 1/Pass 2 dupes
-*   [`1f4991de`](https://github.com/veshivas/vale/commit/1f4991de) fix(qdoc): correct prose line/column accuracy for QDoc comments
+*   [`9368e9b5`](https://github.com/veshivas/vale/commit/9368e9b5) fix(qdoc): lint prose inside \table blocks
+*   [`35f817d4`](https://github.com/veshivas/vale/commit/35f817d4) fix(qdoc): fix \l alias column/line accuracy for space-separated syntax
