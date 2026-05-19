@@ -4,6 +4,16 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.14.2-qdoc-rc2] - 2026-05-19
+
+### Fixed
+
+- **Table cell prose not linted** — `table_block` was falling through to the `raw_block` default case in `qdocCollectProse`, which only preserved newlines without recursing into the block's markup children. Table blocks share the same `repeat(markup)` AST structure as `list_block` and are now recursed into identically, so prose in `\table` cells is linted by Pass 2.
+
+- **`\l` alias column/line accuracy for space-separated syntax** — When the link target and alias are separated by whitespace (`\l {target} {alias}` or `\l {target}\n    {alias}`), the `link_alias` grammar token includes the leading whitespace in its byte range. The previous code indexed `aliasRaw[1:]`, which skipped only one byte regardless of the whitespace length, causing the opening `{` to appear verbatim in the reconstructed prose and the inter-line `\n` to be lost for cross-line aliases. The fix locates the `{` character within `aliasRaw` using `IndexByte` and loops from the child start through that position, preserving `\n` throughout.
+
+---
+
 ## [v3.14.2-qdoc-rc1] - 2026-05-14
 
 ### Fixed
