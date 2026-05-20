@@ -63,6 +63,14 @@ func QDoc() *Language {
 			// (scoped to "meta.image") matches this scope.
 			{Name: "image", ScopePrefix: "meta", Expr: `[(image_command filename: (image_filename) @comment .) (inlineimage_command filename: (inline_text) @comment .)]`},
 
+			// Alt text for \image and \inlineimage. Captured with a text.comment
+			// scope so that isQDocProseCommandScope routes it through lintProse
+			// in isolation — each alt text is its own NLP pass. This lets
+			// SentenceLength fire on a genuinely long caption while preventing
+			// the NLP from joining a short, unpunctuated alt text with an
+			// adjacent prose paragraph and producing a false positive.
+			{Name: "image.alt", Expr: `[(image_command alt: (image_alt_text) @comment) (inlineimage_command alt: (image_alt) @comment)]`},
+
 			// \target and \keyword anchor identifiers. ScopePrefix "meta"
 			// prevents text-scoped rules from firing on anchor names; only rules
 			// explicitly scoped to "meta.anchor" (e.g. Qt.QDocAnchorAPIName) match.
