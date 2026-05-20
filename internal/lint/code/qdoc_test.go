@@ -118,6 +118,84 @@ func TestGetQDocProseBlocks(t *testing.T) {
 	}
 }
 
+// TestGetQDocProseBlocksImageAlt verifies that alt text from \image and
+// \inlineimage is NOT included in prose blocks (it is linted separately via
+// the image.alt Pass-1 query in GetComments, which uses lintLines to avoid
+// false SentenceLength alerts from NLP joining short alt-text phrases with
+// surrounding paragraphs).
+func TestGetQDocProseBlocksImageAlt(t *testing.T) {
+	src := []byte(`/*!
+    \class QWidget
+    \brief The base class of all UI objects.
+
+    \image widget.png The widget is shown by the framework.
+
+    Use \inlineimage logo.png {It is displayed by the system} here.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Alt text must NOT appear in the reconstructed prose (handled via lintLines).
+	if strings.Contains(combined, "widget is shown by the framework") {
+		t.Errorf(`prose block should not contain \image alt text; got:\n%s`, combined)
+	}
+	if strings.Contains(combined, "It is displayed by the system") {
+		t.Errorf(`prose block should not contain \inlineimage alt text; got:\n%s`, combined)
+	}
+	// Filenames must not appear either.
+	if strings.Contains(combined, "widget.png") {
+		t.Errorf(`prose should not contain image filename; got:\n%s`, combined)
+	}
+	if strings.Contains(combined, "logo.png") {
+		t.Errorf(`prose should not contain inlineimage filename; got:\n%s`, combined)
+	}
+}
+
+// TestQDocScopesImageAlt verifies that the image.alt Pass-1 query produces
+// text.comment.image.alt.line scope comments for alt text content.
+func TestQDocScopesImageAlt(t *testing.T) {
+	src := []byte(`/*!
+    \class QWidget
+    \brief The base class of all UI objects.
+
+    \image widget.png The widget overview.
+
+    Use \inlineimage logo.png {Inline alt text} here.
+*/`)
+
+	comments, err := GetComments(src, QDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	foundImage := false
+	foundInline := false
+	for _, c := range comments {
+		if c.Scope == "text.comment.image.alt.line" {
+			if strings.Contains(c.Text, "widget overview") {
+				foundImage = true
+			}
+			if strings.Contains(c.Text, "Inline alt text") {
+				foundInline = true
+			}
+		}
+	}
+	if !foundImage {
+		t.Errorf(`expected text.comment.image.alt.line for \image alt text; got: %v`, comments)
+	}
+	if !foundInline {
+		t.Errorf(`expected text.comment.image.alt.line for \inlineimage alt text; got: %v`, comments)
+	}
+}
+
 // TestGetQDocProseBlocksCodeBlocks verifies that prose reconstruction correctly
 // excludes content inside \code...\endcode, \badcode...\endcode, and
 // \qml...\endqml blocks, and includes prose that follows them.

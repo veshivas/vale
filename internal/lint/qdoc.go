@@ -307,12 +307,14 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 // isQDocProseCommandScope reports whether the comment scope was produced by a
 // CommandMatch query whose content should also be run through lintProse for
 // scope: sentence rule coverage (SentenceLength, OxfordComma, Semicolon).
-// These are brief/note/warning — their text nodes are excluded from
-// GetQDocProseBlocks via skipQDocProseUntilBlank to prevent duplicates.
+// These are brief/note/warning (excluded from GetQDocProseBlocks to prevent
+// duplicates) and image.alt (linted in isolation so NLP cannot concatenate a
+// short unpunctuated caption with adjacent prose paragraphs).
 func isQDocProseCommandScope(scope string) bool {
 	return strings.Contains(scope, ".brief.") ||
 		strings.Contains(scope, ".note.") ||
-		strings.Contains(scope, ".warning.")
+		strings.Contains(scope, ".warning.") ||
+		strings.Contains(scope, ".image.alt.")
 }
 
 // blankNonNewlines replaces every non-newline character in s with a space,
