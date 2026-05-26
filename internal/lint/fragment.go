@@ -43,18 +43,23 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 		if i >= last {
 			line := findLine(comment.Source, alerts[i].Line)
 
-			padding := lang.Padding(line)
-			if strings.HasPrefix(line, " ") {
-				padding += leadingSpaces(line, comment.Offset)
-			}
-
 			// comment.Offset is the source-column of the first content
 			// character on the opening line (e.g. 5 for "\note "). It only
 			// applies to alerts on line 1 of the comment text; subsequent
-			// lines start at column 0 in the source, so no offset is needed.
+			// lines always start at column 0 in the source (they are new
+			// source lines), so srcOffset is 0 for line 2+. Using
+			// comment.Offset for continuation lines in leadingSpaces would
+			// produce a negative padding when comment.Offset > leading_spaces.
 			lineOffset := comment.Offset
+			srcOffset := comment.Offset
 			if alerts[i].Line > 1 {
 				lineOffset = 0
+				srcOffset = 0
+			}
+
+			padding := lang.Padding(line)
+			if strings.HasPrefix(line, " ") {
+				padding += leadingSpaces(line, srcOffset)
 			}
 
 			alerts[i].Line += comment.Line - 1
