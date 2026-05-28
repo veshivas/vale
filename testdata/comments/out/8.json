@@ -17,21 +17,21 @@
         "Text": "Displays a list of items.\n    Can span multiple lines until the first blank line.",
         "Source": "Displays a list of items.\n    Can span multiple lines until the first blank line.",
         "Line": 3,
-        "Offset": 10,
+        "Offset": 11,
         "Scope": "text.comment.brief.line"
     },
     {
         "Text": "Call refresh() after modifying the model.",
         "Source": "Call refresh() after modifying the model.",
         "Line": 8,
-        "Offset": 9,
+        "Offset": 10,
         "Scope": "text.comment.note.line"
     },
     {
         "Text": "Do not call setCount() while the widget is visible.",
         "Source": "Do not call setCount() while the widget is visible.",
         "Line": 10,
-        "Offset": 12,
+        "Offset": 13,
         "Scope": "text.comment.warning.line"
     },
     {
@@ -213,14 +213,14 @@
         "Text": "item-widget-overview",
         "Source": "item-widget-overview",
         "Line": 49,
-        "Offset": 11,
+        "Offset": 12,
         "Scope": "meta.anchor.line"
     },
     {
         "Text": "ItemWidget",
         "Source": "ItemWidget",
         "Line": 50,
-        "Offset": 12,
+        "Offset": 13,
         "Scope": "meta.anchor.line"
     }
 ]

@@ -388,6 +388,57 @@ func TestGetQDocProseBlocksSkipUntilBlank(t *testing.T) {
 	}
 }
 
+// TestGetQDocProseBlocksSkipUntilNewline verifies that \title and section
+// headings (linted separately in Pass 1) are excluded from prose
+// reconstruction. Prose immediately following a heading (no blank line) must
+// be collected normally. This tests the regression where \title text leaked
+// into Pass 2 prose and merged with the following paragraph, producing
+// spurious SentenceLength alerts when the combined sentence exceeded the limit.
+func TestGetQDocProseBlocksSkipUntilNewline(t *testing.T) {
+	src := []byte(`/*!
+    \page automotive-demo
+    \title \QUL Automotive Cluster Demo
+    \brief Demonstrates integrating QML and C++.
+
+    \section1 Overview
+    Body prose after section heading.
+    Another sentence here.
+*/`)
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected at least one prose block, got none")
+	}
+
+	combined := ""
+	for _, b := range blocks {
+		combined += b.Text
+	}
+
+	// Title and section heading text must NOT appear (handled by Pass 1).
+	for _, reject := range []string{
+		"Automotive Cluster Demo",
+		"Overview",
+	} {
+		if strings.Contains(combined, reject) {
+			t.Errorf("skipUntilNewline content %q should not appear in prose:\n%s", reject, combined)
+		}
+	}
+
+	// Prose after heading/title must be present.
+	for _, want := range []string{
+		"Body prose after section heading.",
+		"Another sentence here.",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("expected prose %q not found in:\n%s", want, combined)
+		}
+	}
+}
+
 // TestGetQDocProseBlocksMacroNames verifies that commands parsed as macro_name
 // (custom macros like \macos, \QUL) do not suppress following prose text.
 // The grammar parses unknown commands as command → macro_name; these should

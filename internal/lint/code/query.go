@@ -308,6 +308,11 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 				consumed[b] = true
 			}
 
+			// rawCText is used below to measure leading whitespace that is
+			// trimmed from cText, so we can advance startCol past the space(s)
+			// between the command name and the first content character.
+			rawCText := cText
+
 			if scope.UntilBlankLine {
 				if idx := strings.Index(cText, "\n\n"); idx >= 0 {
 					cText = cText[:idx]
@@ -320,6 +325,11 @@ func (qe *QueryEngine) runCommandMatch(scope core.Scope, source []byte) ([]Comme
 				}
 			}
 			cText = strings.TrimSpace(cText)
+
+			// Advance startCol past any leading whitespace that was trimmed
+			// from the raw text so the alert column points at the first
+			// content character, not the space after the command name.
+			startCol += len(rawCText) - len(strings.TrimLeft(rawCText, " \t"))
 
 			if cText == "" {
 				continue

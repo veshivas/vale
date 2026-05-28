@@ -49,9 +49,18 @@ var codeBlockExitCommands = map[string]bool{
 // causing spurious SentenceLength alerts.
 var skipQDocProseUntilBlank = map[string]bool{
 	"brief": true, "note": true, "warning": true,
-	// Section heading commands: argument is a heading title, not inline prose.
-	// Pass 1 lints heading titles via their own heading scope.
+}
+
+// skipQDocProseUntilNewline lists commands whose argument occupies the rest of
+// the current line only. The skip ends at the first \n so that prose starting
+// on the very next line (no blank line required) is collected normally.
+// Section headings and \title always put their text on the same line as the
+// command; prose may immediately follow on the next line without an intervening
+// blank. \title is also linted in Pass 1 via CommandMatch, so it must not flow
+// into Pass 2 prose reconstruction.
+var skipQDocProseUntilNewline = map[string]bool{
 	"section1": true, "section2": true, "section3": true, "section4": true,
+	"title": true,
 }
 
 // skipQDocProseArgs lists commands whose immediately-following text node holds
@@ -173,6 +182,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	skipNextText := false
 	inCodeBlock := false
 	skipUntilBlankLine := false
+	skipUntilNewline := false
 
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		markup := node.NamedChild(i)
@@ -253,10 +263,21 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					// line. Their text is linted separately via lintLines +
 					// lintProse on the .line comment produced by runCommandMatch.
 					skipUntilBlankLine = true
+					skipUntilNewline = false
 					skipNextText = false
-				} else {
+				} else if skipQDocProseUntilNewline[cmdName] {
+					// section1-4: argument is a single-line heading title;
+					// skip only to the first \n so prose that immediately
+					// follows (no blank line required) is collected normally.
+					skipUntilNewline = true
 					skipUntilBlankLine = false
+					skipNextText = false
+				} else if !skipUntilBlankLine && !skipUntilNewline {
 					skipNextText = skipQDocProseArgs[cmdName]
+				} else {
+					// Inside an active skip region; do not let an inline
+					// command (e.g. \QUL) reset the flag prematurely.
+					skipNextText = false
 				}
 				// Emit the command node with length-preserving blanks for
 				// the keyword prefix (\keyword) and any trailing content after
@@ -320,6 +341,24 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 							b.WriteRune('\n')
 						}
 					}
+				} else if skipUntilNewline {
+					// Section heading: skip the title text on the command's
+					// line (replace with spaces for column accuracy), emit the
+					// \n, then collect the rest as normal prose. The prose may
+					// start on the very next line with no blank line required.
+					if idx := strings.Index(content, "\n"); idx >= 0 {
+						for j := 0; j < idx; j++ {
+							b.WriteByte(' ')
+						}
+						b.WriteRune('\n')
+						b.WriteString(content[idx+1:])
+						skipUntilNewline = false
+					} else {
+						// Entire node is still heading text (no newline yet).
+						for range content {
+							b.WriteByte(' ')
+						}
+					}
 				} else if skipUntilBlankLine {
 					// Skip content until the first blank line (\n\n), then
 					// resume prose collection from that point onward.
@@ -344,7 +383,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				skipNextText = false
 
 			case "inline_command":
-				if inCodeBlock || skipUntilBlankLine {
+				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
 					break
 				}
 				// Emit inline_command content with the command wrapper blanked so
@@ -374,7 +413,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				skipNextText = false
 
 			case "link_command":
-				if inCodeBlock || skipUntilBlankLine {
+				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
 					// Preserve newlines from skipped link content.
 					for _, r := range child.Content(source) {
 						if r == '\n' {
