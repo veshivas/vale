@@ -76,6 +76,8 @@ var skipQDocProseArgs = map[string]bool{
 	"qmltype": true, "qmlproperty": true, "qmlmethod": true, "qmlsignal": true,
 	"qmlenum": true, "qmlmodule": true, "qmlattachedproperty": true,
 	"qmlattachedsignal": true, "qmlvaluetype": true, "inqmlmodule": true,
+	// Modifier commands — argument is a version string, class name, or flag.
+	"nativetype": true, "since": true, "preliminary": true,
 	// Cross-reference commands — argument is a symbol / page name.
 	"sa": true, "see": true,
 }

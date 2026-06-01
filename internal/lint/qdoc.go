@@ -143,6 +143,14 @@ func applyQDocPatterns(c *core.Config, normedExt, realExt, content string) (stri
 //
 // Called by lintQDocFragments when [formats] maps a code extension to .qdoc.
 func (l *Linter) lintQDocBlock(f *core.File, blockText string, startLine int) error {
+	// Strip Doxygen-style " * " continuation-line prefixes before re-wrapping.
+	// Some C++ code uses /*!  *  text  */ style where each interior line begins
+	// with an optional-whitespace + "*". The QDoc tree-sitter grammar's text
+	// rule matches /[^\\\*]+/, which excludes "*", so these lines produce ERROR
+	// nodes that qdocCollectProse blanks — making the prose invisible to linting.
+	// Replacing the leading "*" with a space preserves column positions.
+	blockText = stripDoxygenPrefixes(blockText)
+
 	// Re-wrap so the QDoc grammar can parse it. blockText already begins with
 	// the '\n' that followed '/*!' in the original source, so we prepend '/*!'
 	// directly (no extra newline) to keep node line numbers in sync with the
@@ -315,6 +323,23 @@ func isQDocProseCommandScope(scope string) bool {
 		strings.Contains(scope, ".note.") ||
 		strings.Contains(scope, ".warning.") ||
 		strings.Contains(scope, ".image.alt.")
+}
+
+// stripDoxygenPrefixes removes Doxygen-style " * " continuation-line prefixes
+// from block-comment content. Each line whose first non-whitespace character
+// is "*" has that "*" replaced with a space so column positions are preserved.
+// This allows the QDoc tree-sitter grammar (whose text rule excludes "*") to
+// parse the rest of the line as plain prose.
+func stripDoxygenPrefixes(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		trimStart := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimStart, "*") {
+			pos := strings.Index(line, "*")
+			lines[i] = line[:pos] + " " + line[pos+1:]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // blankNonNewlines replaces every non-newline character in s with a space,
