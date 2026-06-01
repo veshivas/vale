@@ -153,7 +153,14 @@ func (l *Linter) lintQDocFragments(f *core.File, lang *code.Language) error {
 			// QDoc doc-comment block: use the full two-pass QDoc pipeline.
 			// lintQDocBlock handles its own alert position adjustment and
 			// restores f.Content before returning.
-			if err = l.lintQDocBlock(f, comment.Text, comment.Line); err != nil {
+			//
+			// Use comment.Source (with /*! and */ stripped) rather than
+			// comment.Text so that per-line indentation is preserved.
+			// comment.Text has leading spaces stripped by query.go's TrimLeft
+			// cutset pass, causing column positions inside the prose block to be
+			// reported 4 columns too low for indented .cpp doc-comment blocks.
+			blockText := qdocBlockText(comment.Source)
+			if err = l.lintQDocBlock(f, blockText, comment.Line); err != nil {
 				return err
 			}
 			continue
@@ -179,4 +186,20 @@ func (l *Linter) lintQDocFragments(f *core.File, lang *code.Language) error {
 
 	f.SetText(wholeFile)
 	return nil
+}
+
+// qdocBlockText extracts the raw block-comment content from a /*! ... */
+// source string with the delimiters stripped but per-line indentation intact.
+// This is used instead of comment.Text (which has leading spaces stripped by
+// the query engine's TrimLeft cutset pass) so that column positions reported
+// by lintQDocBlock match the original source indentation.
+func qdocBlockText(source string) string {
+	s := source
+	if strings.HasPrefix(s, "/*!") {
+		s = s[3:]
+	}
+	if idx := strings.LastIndex(s, "*/"); idx >= 0 {
+		s = s[:idx]
+	}
+	return s
 }
