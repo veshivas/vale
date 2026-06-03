@@ -252,26 +252,38 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 	pass1End := len(f.Alerts)
 
 	// --- Pass 2: reconstructed prose blocks ---
+	//
+	// Each block_comment is split into per-paragraph sub-comments before
+	// calling lintProse. Without splitting, the NLP sentence tokenizer
+	// receives the full block text (including the blank lines produced by
+	// BlockIgnore blanking of \qml...\endqml and \code...\endcode regions)
+	// and joins a lead sentence that ends with ':' with the following
+	// paragraph into one sentence, producing false SentenceLength alerts.
+	// The Punkt tokenizer does not treat ':' + blank lines as a sentence
+	// boundary; paragraph-level splitting ensures each NLP invocation
+	// sees only one paragraph.
 	proseBlocks, err := code.GetQDocProseBlocks([]byte(content))
 	if err != nil {
 		return err
 	}
 	for _, comment := range proseBlocks {
 		l.SetMetaScope(comment.Scope)
-		f.SetText(comment.Text)
+		for _, para := range splitProseIntoParagraphs(comment) {
+			f.SetText(para.Text)
 
-		block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
-		if err = l.lintProse(f, block, len(f.Lines)); err != nil {
-			return err
-		}
+			block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
+			if err = l.lintProse(f, block, len(f.Lines)); err != nil {
+				return err
+			}
 
-		size := len(f.Alerts)
-		if size != last {
-			adj := comment
-			adj.Line += lineOffset
-			f.Alerts = adjustAlerts(f.Alerts, last, adj, lang)
+			size := len(f.Alerts)
+			if size != last {
+				adj := para
+				adj.Line += lineOffset
+				f.Alerts = adjustAlerts(f.Alerts, last, adj, lang)
+			}
+			last = size
 		}
-		last = size
 	}
 
 	// --- Dedup: remove Pass 1 alerts superseded by Pass 2 ---
@@ -340,6 +352,54 @@ func stripDoxygenPrefixes(s string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// splitProseIntoParagraphs splits a prose Comment into one Comment per
+// paragraph (contiguous run of non-blank lines). This ensures that the NLP
+// sentence tokenizer in lintProse operates on one paragraph at a time rather
+// than the full block_comment text. Without splitting, a lead sentence ending
+// in ':' before a blanked \qml or \code block is joined by the Punkt tokenizer
+// with the following paragraph, producing spurious SentenceLength alerts.
+//
+// Each returned Comment has:
+//   - Text:   clean paragraph text (TrimLeft-stripped per line, for NLP)
+//   - Source: raw paragraph text (original indentation, for adjustAlerts)
+//   - Line:   1-based line of the paragraph start in the wrapped content
+//   - Offset, Scope: inherited from the parent Comment
+func splitProseIntoParagraphs(c code.Comment) []code.Comment {
+	cleanLines := strings.Split(c.Text, "\n")
+	rawLines := strings.Split(c.Source, "\n")
+
+	var paragraphs []code.Comment
+	i := 0
+	for i < len(cleanLines) {
+		if strings.TrimSpace(cleanLines[i]) == "" {
+			i++
+			continue
+		}
+		j := i
+		for j < len(cleanLines) && strings.TrimSpace(cleanLines[j]) != "" {
+			j++
+		}
+		end := j
+		if end > len(rawLines) {
+			end = len(rawLines)
+		}
+		paragraphs = append(paragraphs, code.Comment{
+			// Always include a trailing "\n" so that lintProse's needsLookup
+			// check (strings.Count(text, "\n") > 0) is true. Without the
+			// trailing newline a single-line paragraph would use assignLoc
+			// (lookup=false) which cannot locate the match when blk.Line=-1,
+			// silently dropping sentence-scope alerts.
+			Text:   strings.Join(cleanLines[i:j], "\n") + "\n",
+			Source: strings.Join(rawLines[i:end], "\n"),
+			Line:   c.Line + i,
+			Offset: c.Offset,
+			Scope:  c.Scope,
+		})
+		i = j
+	}
+	return paragraphs
 }
 
 // blankNonNewlines replaces every non-newline character in s with a space,
