@@ -4,6 +4,28 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.14.2q] - 2026-06-04
+
+### Added
+
+- **Image alt text linted as prose** — Alt text from `\image` and `\inlineimage` commands is now extracted with a `text.comment.image.alt` scope and passed through the prose pipeline (Pass 2), enabling sentence-scope rules (OxfordComma, SentenceLength, Semicolon) to fire on captions.
+
+### Fixed
+
+- **False `SentenceLength` on lead sentence before `\qml`/`\code` blocks** — `BlockIgnores` blanks `\qml`/`\code` regions before tree-sitter parsing, leaving blank-line boundaries that the Punkt NLP tokenizer bridges, joining the colon-terminated sentence before the code block with the paragraph that follows it. Prose blocks are now split at blank-line boundaries into per-paragraph sub-Comments before NLP processing, preventing the tokenizer from crossing code-block boundaries.
+
+- **`.cpp` column offsets reported too low** — `lintQDocFragments` passed `comment.Text` to `lintQDocBlock`. The query engine's `TrimLeft` cutset strips leading indentation from `.cpp` doc-comment lines, causing column numbers to be underreported by the indentation width (typically 4). Fixed by using `comment.Source` with only the `/*!`/`*/` delimiters stripped, preserving per-line indentation.
+
+- **Doxygen-style prefixes in `.cpp` blocks** — `@brief`, `@param`, and similar Doxygen-style command lines inside `/*!...*/` blocks were passed to the prose pipeline, producing false alerts. `stripDoxygenPrefixes` now blanks these lines before tree-sitter parsing.
+
+- **Negative column numbers for continuation lines** — `adjustAlerts` applied `comment.Offset` unconditionally, producing negative column numbers for alerts on continuation lines in `.cpp` doc-comment blocks where the first content character carries no indentation offset. The offset is now clamped to zero on subsequent lines.
+
+- **`\title` and section heading text excluded from prose** — Heading command arguments were included in the `qdocCollectProse` output, inflating word counts for the following paragraph and triggering spurious `Microsoft.SentenceLength` alerts. These commands are now in the `skipQDocProseUntilBlank` map.
+
+- **tree-sitter-qdoc upgraded to v0.2.2** — Grammar update with fixes for `macro_name` and inline command parsing edge cases.
+
+---
+
 ## [v3.14.2-qdoc-rc2] - 2026-05-19
 
 ### Fixed
