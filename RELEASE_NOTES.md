@@ -1,4 +1,4 @@
-# v3.14.2q
+# v3.14.2-qdoc
 
 *   [`fdeac45f`](https://github.com/veshivas/vale/commit/fdeac45f) fix(qdoc): split prose blocks into paragraphs before NLP sentence detection
 *   [`2fbd23d8`](https://github.com/veshivas/vale/commit/2fbd23d8) fix(qdoc): lint pre-\qml prose, Doxygen blocks, and fix .cpp column offsets
