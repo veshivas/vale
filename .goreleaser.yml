@@ -6,7 +6,7 @@ release:
   github:
     owner: veshivas
     name: vale
-  prerelease: auto
+  prerelease: false
 
 builds:
   - id: vale-darwin-amd64
