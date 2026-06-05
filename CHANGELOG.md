@@ -4,7 +4,7 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
-## [v3.14.2q] - 2026-06-04
+## [v3.14.2-qdoc] - 2026-06-04
 
 ### Added
 
