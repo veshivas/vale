@@ -314,3 +314,79 @@ func TestQDocFragments(t *testing.T) {
 		})
 	}
 }
+
+// TestQDocInc verifies that .qdocinc files are linted through lintQDocInc:
+// the wrap-and-parse pipeline wraps freeform content in /*! ... */ and runs
+// the standard QDoc two-pass linting with lineOffset=-1 to correct for the
+// added wrapper line.
+//
+// Test fixture layout (test.qdocinc):
+//
+//	 1: // Copyright ... BADPROSE ...   → no alert (// comment line blanked)
+//	 2: // SPDX ...                     → no alert (// comment line blanked)
+//	 3: (blank)
+//	 4: // Shared content fragment ...  → no alert (// comment line blanked)
+//	 5: (blank)
+//	 6: //! [overview]                  → no alert (section marker blanked)
+//	 7: \brief BADBRIEF ...             → BriefMarker at line 7
+//	 8: (blank)
+//	 9: BADPROSE body. BADSENTENCE.     → ProseMarker + SentenceMarker at line 9
+//	10: //! [overview]                  → no alert (section marker blanked)
+//	11: (blank)
+//	12: //! [usage]                     → no alert
+//	13: Use \c{connect()} ...           → prose (no markers)
+//	14: The \l{...}{QObject} ...        → prose (no markers)
+//	15: (blank)
+//	16: \note The module is loaded ...  → note prose
+//	17: //! [usage]                     → no alert
+//	18: (blank)
+//	19: //! [code-example]              → no alert
+//	20: The following snippet ...       → prose
+//	21: (blank)
+//	22: \code                           → BlockIgnore start
+//	23: BADPROSE inside code block ...  → no alert (blanked by BlockIgnores)
+//	24: QObject::connect(...)           → no alert (inside \code block)
+//	25: \endcode                        → BlockIgnore end
+//	26: (blank)
+//	27: Refer to the \l{...} ...        → prose
+//	28: //! [code-example]              → no alert
+func TestQDocInc(t *testing.T) {
+	const ini = "../../testdata/fixtures/qdocinc/.vale.ini"
+	const file = "../../testdata/fixtures/qdocinc/test.qdocinc"
+
+	alerts := lintWithConfig(t, ini, file)
+
+	// \brief BADBRIEF at line 7 → BriefMarker.
+	if !hasAlertAtLine(alerts, "Test.BriefMarker", 7) {
+		t.Errorf("expected Test.BriefMarker at line 7 (\\brief); alerts: %v", alerts)
+	}
+
+	// BADPROSE in prose body at line 9 → ProseMarker.
+	if !hasAlertAtLine(alerts, "Test.ProseMarker", 9) {
+		t.Errorf("expected Test.ProseMarker at line 9 (prose body); alerts: %v", alerts)
+	}
+
+	// BADSENTENCE in prose body → SentenceMarker (NLP sentence scope).
+	if len(alertsByCheck(alerts, "Test.SentenceMarker")) == 0 {
+		t.Errorf("expected at least one Test.SentenceMarker alert; alerts: %v", alerts)
+	}
+
+	// // comment line (line 1) must not produce any alert, even though it
+	// contains BADPROSE — the line is blanked before linting.
+	if !hasNoAlertAtLine(alerts, 1) {
+		t.Errorf("expected no alert at line 1 (// comment line); alerts: %v", alerts)
+	}
+
+	// //! [id] section markers must not produce any alert.
+	for _, markerLine := range []int{6, 10, 12, 17, 19, 28} {
+		if !hasNoAlertAtLine(alerts, markerLine) {
+			t.Errorf("expected no alert at line %d (//! section marker); alerts: %v", markerLine, alerts)
+		}
+	}
+
+	// BADPROSE inside \code...\endcode at line 23 must not fire — BlockIgnores
+	// blanks the code block content before the QDoc parser sees it.
+	if !hasNoAlertAtLine(alerts, 23) {
+		t.Errorf("expected no alert at line 23 (BADPROSE inside \\code block); alerts: %v", alerts)
+	}
+}

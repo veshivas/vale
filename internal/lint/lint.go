@@ -207,6 +207,8 @@ func (l *Linter) lintFile(src string) lintResult {
 			err = l.lintOrg(file)
 		case ".qdoc":
 			err = l.lintQDoc(file)
+		case ".qdocinc":
+			err = l.lintQDocInc(file)
 		}
 	} else if file.Format == "data" && !simple && hasViews {
 		err = l.lintData(file)

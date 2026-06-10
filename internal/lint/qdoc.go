@@ -13,7 +13,8 @@
 //	        spanning inline-command boundaries, and lints via lintProse to
 //	        enable scope:sentence rules (OxfordComma, SentenceLength, etc.).
 //
-// File routing: .qdoc/.qdocinc → format "markup" → lintQDoc (this file).
+// File routing: .qdoc → format "markup" → lintQDoc (this file).
+//              .qdocinc → format "markup" → lintQDocInc (this file).
 // Embedded QDoc in .cpp/.qml → lintFragments → lintQDocFragments → lintQDocBlock.
 package lint
 
@@ -32,6 +33,14 @@ import (
 // BlockIgnores to comment content rather than the whole file.
 var reQDocComment = regexp.MustCompile(`(?s)/\*!.*?\*/`)
 
+// reQDocIncNonContent matches lines in .qdocinc files that are not QDoc prose:
+//   - //! [identifier] section-delimiter lines (snippet boundary markers)
+//   - // ...           plain C++ line comments (copyright headers, annotations)
+//
+// These lines are blanked before linting so they are not treated as prose.
+// Newlines are preserved to keep alert line numbers accurate.
+var reQDocIncNonContent = regexp.MustCompile(`(?m)^[ \t]*//.*$`)
+
 func (l *Linter) lintQDoc(f *core.File) error {
 	originalContent := f.Content
 
@@ -43,6 +52,45 @@ func (l *Linter) lintQDoc(f *core.File) error {
 	}
 
 	if err = l.runQDocPasses(f, content, 0); err != nil {
+		return err
+	}
+
+	f.SetText(originalContent)
+	return nil
+}
+
+// lintQDocInc lints a .qdocinc snippet file. Unlike .qdoc files, .qdocinc
+// files contain raw QDoc prose (with inline commands) and //! [identifier]
+// section-delimiter lines, but no /*!...*/ block-comment delimiters.
+//
+// The handler blanks //! [identifier] marker lines to exclude them from
+// linting (newlines preserved for line-number accuracy), then wraps the
+// content in /*! ... */ so the QDoc tree-sitter grammar can parse it as a
+// block_comment. The added /*!\n prefix shifts all node line numbers by +1,
+// so lineOffset = -1 is passed to runQDocPasses to map them back to the
+// original file coordinates.
+func (l *Linter) lintQDocInc(f *core.File) error {
+	originalContent := f.Content
+
+	// Blank // comment lines (section markers and plain C++ comments);
+	// preserve newlines for line accuracy.
+	content := reQDocIncNonContent.ReplaceAllStringFunc(originalContent, blankNonNewlines)
+
+	// Wrap with /*!\n so the QDoc grammar identifies a block_comment node.
+	// Wrapping must happen BEFORE applyQDocPatterns so that BlockIgnores
+	// (applied per /*!...*/ block by reQDocComment) can match within the
+	// wrapped content. The added line shifts tree-sitter node lines by +1;
+	// lineOffset = -1 compensates so alerts are reported at original file
+	// line numbers.
+	wrapped := "/*!\n" + content + "\n*/"
+
+	// Apply BlockIgnores and TokenIgnores scoped to .qdocinc (or .qdoc).
+	wrapped, err := applyQDocPatterns(l.Manager.Config, f.NormedExt, f.RealExt, wrapped)
+	if err != nil {
+		return err
+	}
+
+	if err = l.runQDocPasses(f, wrapped, -1); err != nil {
 		return err
 	}
 

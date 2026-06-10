@@ -1,0 +1,28 @@
+// Copyright (C) 2026 The Qt Company Ltd. BADPROSE must not fire here.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only
+
+// Shared content fragment: tests lintQDocInc with multi-section .qdocinc.
+
+//! [overview]
+\brief BADBRIEF configuration overview.
+
+BADPROSE body text. BADSENTENCE sentence.
+//! [overview]
+
+//! [usage]
+Use \c{connect()} to link a signal to a slot.
+The \l{Qt::QObject}{QObject} class provides the base implementation.
+
+\note The module is loaded automatically on startup.
+//! [usage]
+
+//! [code-example]
+The following snippet demonstrates the API:
+
+\code
+BADPROSE inside code block must not fire here.
+QObject::connect(sender, &Sender::signal, receiver, &Receiver::slot);
+\endcode
+
+Refer to the \l{Qt documentation}{Qt docs} for more details.
+//! [code-example]
