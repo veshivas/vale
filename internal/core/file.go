@@ -283,8 +283,25 @@ func (f *File) assignLoc(ctx string, blk nlp.Block, pad int, a Alert) (int, []in
 		//
 		// At the very least, this change includes a representative test case
 		// and a temporary fix.
-		exact := len(l) > loc[1] && l[loc[0]:loc[1]] == a.Match
-		if exact || idx == blk.Line {
+		//
+		// exact uses <= (not <) so that end-of-string matches (where loc[1]
+		// == len(l)) are recognised. Previously the strict > caused every
+		// end-of-line match (e.g. existence rules like [^.!?]$) to fall
+		// through to the initialPosition path, which finds the first
+		// occurrence of the match character rather than the actual one.
+		exact := loc[1] <= len(l) && l[loc[0]:loc[1]] == a.Match
+		if exact {
+			// The check engine already identified the exact byte/rune offset.
+			// Convert loc[0] to a 1-indexed column and return directly,
+			// avoiding initialPosition's first-occurrence search which gives
+			// the wrong column when the matched character is not unique.
+			col := nlp.StrLen(l[:loc[0]]) + 1 + pad
+			end := col + (loc[1] - loc[0]) - 1
+			if end <= 0 {
+				end = 1
+			}
+			return idx + 1, []int{col, end}
+		} else if idx == blk.Line {
 			length := nlp.StrLen(l)
 			// Mask the words preceding the match (computed in AddAlert when
 			// the token occurs more than once) so the re-search below lands
