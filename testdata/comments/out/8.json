@@ -204,9 +204,9 @@
     },
     {
         "Text": "{A large icon}",
-        "Source": " {A large icon}",
+        "Source": "{A large icon}",
         "Line": 45,
-        "Offset": 39,
+        "Offset": 40,
         "Scope": "text.comment.image.alt.line"
     },
     {

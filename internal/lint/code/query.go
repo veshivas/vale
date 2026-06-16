@@ -79,6 +79,37 @@ func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, ski
 			rText := c.Node.Content(source)
 			cText := qe.lang.Delims.ReplaceAllString(rText, "")
 
+			// Some in-grammar tokens (notably image_alt for \inlineimage)
+			// include the inter-token horizontal whitespace that the parser
+			// would otherwise consume as `extras`. The grammar regex matches
+			// only `{...}` but tree-sitter reports the node's start position
+			// at the preceding space when the token follows a field at the
+			// same nesting level. The leading whitespace ends up in the
+			// captured Source/Text and the node's StartPoint, which makes
+			// adjustAlerts compute a negative `padding` via leadingSpaces()
+			// (leading_space_count - comment.Offset) and zeroes out the
+			// offset addition, reporting alerts at the wrong column.
+			//
+			// External-scanner tokens (image_alt_text, image_filename) skip
+			// this whitespace themselves via lexer->advance(skip=true), so
+			// only in-grammar tokens are affected.
+			//
+			// The fix: for non-catch-all single-line captures, strip leading
+			// horizontal whitespace from both rText and cText and advance
+			// startCol by the same amount.
+			startCol := int(c.Node.StartPoint().Column)
+			if scope.Name != "" && !strings.ContainsRune(rText, '\n') {
+				trim := 0
+				for trim < len(rText) && (rText[trim] == ' ' || rText[trim] == '\t') {
+					trim++
+				}
+				if trim > 0 {
+					rText = rText[trim:]
+					cText = strings.TrimLeft(cText, " \t")
+					startCol += trim
+				}
+			}
+
 			if scope.FirstLine {
 				// Extract only the first non-empty line (heading text).
 				cText = strings.TrimLeft(cText, " \t")
@@ -123,7 +154,7 @@ func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, ski
 
 			comments = append(comments, Comment{
 				Line:   int(c.Node.StartPoint().Row) + 1,
-				Offset: int(c.Node.StartPoint().Column),
+				Offset: startCol,
 				Scope:  blkScope,
 				Text:   cText,
 				Source: rText,
