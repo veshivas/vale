@@ -62,11 +62,24 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 				padding += leadingSpaces(line, srcOffset)
 			}
 
-			alerts[i].Line += comment.Line - 1
-			alerts[i].Span = []int{
-				alerts[i].Span[0] + lineOffset + padding,
-				alerts[i].Span[1] + lineOffset + padding,
+			// For QDoc scoped comments (e.g., \target, \keyword), comment.Source
+			// is just the extracted text fragment without the original indentation.
+			// These have non-zero srcOffset (the absolute source column) but no
+			// leading spaces in comment.Source. Detect this case: if srcOffset > 0
+			// and line has no leading spaces, then srcOffset is absolute, not
+			// relative. In that case, Offset already points to the correct position.
+			if srcOffset > 0 && !strings.HasPrefix(line, " ") && alerts[i].Line == 1 {
+				// Span should start at the Offset position and extend by the text width.
+				// Add 1 to convert from 0-indexed to 1-indexed column position.
+				textLen := alerts[i].Span[1] - alerts[i].Span[0]
+				alerts[i].Span = []int{comment.Offset + 1, comment.Offset + 1 + textLen}
+			} else {
+				alerts[i].Span = []int{
+					alerts[i].Span[0] + lineOffset + padding,
+					alerts[i].Span[1] + lineOffset + padding,
+				}
 			}
+			alerts[i].Line += comment.Line - 1
 		}
 	}
 	return alerts

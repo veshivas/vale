@@ -78,6 +78,55 @@ func TestQDocScopes(t *testing.T) {
 	}
 }
 
+// TestQDocAnchorConsecutive verifies that consecutive \target and \keyword
+// commands each produce an independent Comment with correct Line and Offset.
+// Previously, coalesce() merged them into a single multi-line Comment, causing
+// adjustAlerts() to report column 1 for all commands after the first.
+func TestQDocAnchorConsecutive(t *testing.T) {
+	src := []byte("/*!\n    \\target QWidget\n    \\target QDialog::exec\n    \\keyword QPushButton\n    \\keyword clicked()\n*/")
+
+	comments, err := GetComments(src, QDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type want struct {
+		text   string
+		line   int
+		offset int
+		scope  string
+	}
+	cases := []want{
+		{"QWidget", 2, 12, "meta.anchor.line"},
+		{"QDialog::exec", 3, 12, "meta.anchor.line"},
+		{"QPushButton", 4, 13, "meta.anchor.line"},
+		{"clicked()", 5, 13, "meta.anchor.line"},
+	}
+
+	anchors := []Comment{}
+	for _, c := range comments {
+		if c.Scope == "meta.anchor.line" {
+			anchors = append(anchors, c)
+		}
+	}
+
+	if len(anchors) != len(cases) {
+		t.Fatalf("expected %d anchor comments, got %d: %v", len(cases), len(anchors), anchors)
+	}
+	for i, c := range anchors {
+		w := cases[i]
+		if c.Text != w.text {
+			t.Errorf("[%d] Text: got %q, want %q", i, c.Text, w.text)
+		}
+		if c.Line != w.line {
+			t.Errorf("[%d] Line: got %d, want %d (text %q)", i, c.Line, w.line, c.Text)
+		}
+		if c.Offset != w.offset {
+			t.Errorf("[%d] Offset: got %d, want %d (text %q)", i, c.Offset, w.offset, c.Text)
+		}
+	}
+}
+
 // TestGetQDocProseBlocks verifies that GetQDocProseBlocks reconstructs prose
 // across inline-command boundaries and skips topic-command arguments.
 func TestGetQDocProseBlocks(t *testing.T) {

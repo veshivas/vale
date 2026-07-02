@@ -88,11 +88,13 @@ func coalesce(comments []Comment) []Comment {
 	}
 
 	for i, comment := range comments {
-		if comment.Scope == "text.comment.block" { //nolint:gocritic
-			// Flush first: a pending run of line comments belongs to the
-			// preceding line comment, not this block. Without this, the
-			// buffered text leaks into the block and is reported at the
-			// block's line (past EOF) under the wrong scope -- see #1020.
+		// Block comments and anchor commands should not be merged with adjacent
+		// comments. Block comments are inherently multi-line; anchor commands
+		// (like \target, \keyword) should each maintain their individual source
+		// position for correct column reporting, even when consecutive.
+		// Flush first: a pending run of line comments belongs to the preceding
+		// line comment, not this block -- see #1020.
+		if comment.Scope == "text.comment.block" || strings.Contains(comment.Scope, "meta.anchor") { //nolint:gocritic
 			flush()
 			joined = append(joined, comment)
 		} else if i == 0 || doneMerging(comment, comments[i-1]) {
