@@ -44,12 +44,9 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 			line := findLine(comment.Source, alerts[i].Line)
 
 			// comment.Offset is the source-column of the first content
-			// character on the opening line (e.g. 5 for "\note "). It only
-			// applies to alerts on line 1 of the comment text; subsequent
-			// lines always start at column 0 in the source (they are new
-			// source lines), so srcOffset is 0 for line 2+. Using
-			// comment.Offset for continuation lines in leadingSpaces would
-			// produce a negative padding when comment.Offset > leading_spaces.
+			// character on the opening line (e.g. 13 for "\warning "). It
+			// applies to alerts on line 1; subsequent lines set srcOffset=0
+			// so the large first-line offset is not applied to them.
 			lineOffset := comment.Offset
 			srcOffset := comment.Offset
 			if alerts[i].Line > 1 {
@@ -59,7 +56,17 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 
 			padding := lang.Padding(line)
 			if strings.HasPrefix(line, " ") {
-				padding += leadingSpaces(line, srcOffset)
+				// For continuation lines of QDoc scoped commands (comment.Offset
+				// > 0), runCommandMatch sets cText via strings.TrimSpace which
+				// strips the leading whitespace only from line 1. Continuation
+				// lines retain their raw source indentation, so Span[0] already
+				// reflects the correct source column — adding leadingSpaces here
+				// would double-count those leading spaces. For regular code
+				// comments (comment.Offset == 0), the delimiter is stripped but
+				// leading whitespace remains as padding to re-add.
+				if alerts[i].Line == 1 || comment.Offset == 0 {
+					padding += leadingSpaces(line, srcOffset)
+				}
 			}
 
 			// For QDoc scoped comments (e.g., \target, \keyword), comment.Source
@@ -69,10 +76,15 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 			// and line has no leading spaces, then srcOffset is absolute, not
 			// relative. In that case, Offset already points to the correct position.
 			if srcOffset > 0 && !strings.HasPrefix(line, " ") && alerts[i].Line == 1 {
-				// Span should start at the Offset position and extend by the text width.
-				// Add 1 to convert from 0-indexed to 1-indexed column position.
+				// Span[0] is the 1-indexed column of the match within the comment
+				// Text. Convert to 0-indexed offset within the text, then add
+				// comment.Offset+1 to get the 1-indexed source column. This correctly
+				// handles both single-token matches (e.g. \target, \keyword, where
+				// Span[0]==1 so matchOffset==0) and matches deep in a multi-line
+				// \brief/\note/\warning argument (where Span[0]>1).
 				textLen := alerts[i].Span[1] - alerts[i].Span[0]
-				alerts[i].Span = []int{comment.Offset + 1, comment.Offset + 1 + textLen}
+				matchOffset := alerts[i].Span[0] - 1
+				alerts[i].Span = []int{comment.Offset + 1 + matchOffset, comment.Offset + 1 + matchOffset + textLen}
 			} else {
 				alerts[i].Span = []int{
 					alerts[i].Span[0] + lineOffset + padding,
