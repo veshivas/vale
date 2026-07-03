@@ -68,10 +68,6 @@ func (qe *QueryEngine) run(scope core.Scope, q *sitter.Query, source []byte, ski
 
 		m = qc.FilterPredicates(m, source)
 		for _, c := range m.Captures {
-			// Only process @comment captures; skip helper captures like @_cmd.
-			if q.CaptureNameForId(c.Index) != "comment" {
-				continue
-			}
 			// Skip nodes already consumed by a CommandMatch query (Pass 1).
 			if skip[c.Node.StartByte()] {
 				continue
