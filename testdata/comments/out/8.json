@@ -70,7 +70,7 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "\n\n\n",
+        "Text": "\n\n    \n",
         "Source": "\n\n    ",
         "Line": 19,
         "Offset": 12,
@@ -126,14 +126,14 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "\n\n\n",
+        "Text": "\n\n    \n",
         "Source": "\n\n    ",
         "Line": 24,
         "Offset": 13,
         "Scope": "text.comment.block"
     },
     {
-        "Text": "\n\n\n",
+        "Text": "\n\n    \n",
         "Source": "\n\n    ",
         "Line": 28,
         "Offset": 11,
@@ -147,7 +147,7 @@
         "Scope": "text.comment.block"
     },
     {
-        "Text": "\n\n\n",
+        "Text": "\n\n    \n",
         "Source": "\n\n    ",
         "Line": 32,
         "Offset": 16,
@@ -161,7 +161,7 @@
         "Scope": "text.comment.block"
     },
     {
-        "Text": "\n\n\n",
+        "Text": "\n\n    \n",
         "Source": "\n\n    ",
         "Line": 36,
         "Offset": 17,
