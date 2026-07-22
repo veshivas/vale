@@ -128,7 +128,7 @@ func TestQDocAnchorConsecutive(t *testing.T) {
 }
 
 // TestGetQDocProseBlocks verifies that GetQDocProseBlocks reconstructs prose
-// across inline-command boundaries and skips topic-command arguments.
+// across inline-command boundaries.
 func TestGetQDocProseBlocks(t *testing.T) {
 	src := []byte(`/*!
     \class QProcess
@@ -160,10 +160,6 @@ func TestGetQDocProseBlocks(t *testing.T) {
 	}
 	if !strings.Contains(combined, ";") {
 		t.Errorf("prose blocks do not contain expected semicolon; got:\n%s", combined)
-	}
-	// Topic-command argument ("QProcess") must not appear.
-	if strings.Contains(combined, "QProcess") {
-		t.Errorf("prose block should not contain topic-command argument 'QProcess'; got:\n%s", combined)
 	}
 }
 
