@@ -63,24 +63,6 @@ var skipQDocProseUntilNewline = map[string]bool{
 	"title": true,
 }
 
-// skipQDocProseArgs lists commands whose immediately-following text node holds
-// a structured argument (identifier, signature, or reference list) rather than
-// prose. These are excluded from reconstruction to avoid contaminating NLP
-// sentence splitting with non-prose content like "QNetworkReply" or
-// "int Calculator::add(int a, int b)".
-var skipQDocProseArgs = map[string]bool{
-	// Topic commands — argument is an identifier / signature.
-	"class": true, "enum": true, "fn": true, "property": true, "variable": true,
-	"typedef": true, "typealias": true, "namespace": true, "module": true,
-	"group": true, "page": true, "example": true, "macro": true, "headerfile": true,
-	"qmltype": true, "qmlproperty": true, "qmlmethod": true, "qmlsignal": true,
-	"qmlenum": true, "qmlmodule": true, "qmlattachedproperty": true,
-	"qmlattachedsignal": true, "qmlvaluetype": true, "inqmlmodule": true,
-	// Modifier commands — argument is a version string, class name, or flag.
-	"nativetype": true, "since": true, "preliminary": true,
-	// Cross-reference commands — argument is a symbol / page name.
-	"sa": true, "see": true,
-}
 
 // GetQDocProseBlocks parses source with the QDoc grammar and returns one
 // Comment per block_comment node whose reconstructed prose is non-empty.
@@ -181,7 +163,6 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 //   - link_command: v0.2.1+ grammar node for \l{target}{alias}; emits the alias
 //     text (inline_text children) so prose is complete for NLP rules.
 func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
-	skipNextText := false
 	inCodeBlock := false
 	skipUntilBlankLine := false
 	skipUntilNewline := false
@@ -197,7 +178,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 
 			switch child.Type() {
 			case "block_command":
-				skipNextText = false
 				skipUntilBlankLine = false
 				// block_command has one named child: the specific block type.
 				// Recurse into prose-bearing blocks; skip raw and table.
@@ -255,10 +235,8 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				}
 				if codeBlockExitCommands[cmdName] {
 					inCodeBlock = false
-					skipNextText = false
 				} else if codeBlockEnterCommands[cmdName] {
 					inCodeBlock = true
-					skipNextText = false
 					skipUntilBlankLine = false
 				} else if skipQDocProseUntilBlank[cmdName] {
 					// brief/note/warning: skip all content until first blank
@@ -266,20 +244,12 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					// lintProse on the .line comment produced by runCommandMatch.
 					skipUntilBlankLine = true
 					skipUntilNewline = false
-					skipNextText = false
 				} else if skipQDocProseUntilNewline[cmdName] {
 					// section1-4: argument is a single-line heading title;
 					// skip only to the first \n so prose that immediately
 					// follows (no blank line required) is collected normally.
 					skipUntilNewline = true
 					skipUntilBlankLine = false
-					skipNextText = false
-				} else if !skipUntilBlankLine && !skipUntilNewline {
-					skipNextText = skipQDocProseArgs[cmdName]
-				} else {
-					// Inside an active skip region; do not let an inline
-					// command (e.g. \QUL) reset the flag prematurely.
-					skipNextText = false
 				}
 				// Emit the command node with length-preserving blanks for
 				// the keyword prefix (\keyword) and any trailing content after
@@ -335,7 +305,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 
 			case "text":
 				content := child.Content(source)
-				if inCodeBlock || skipNextText {
+				if inCodeBlock {
 					// Preserve newlines from skipped text so that prose line
 					// offsets stay in sync with source line numbers.
 					for _, r := range content {
@@ -382,7 +352,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				} else {
 					b.WriteString(content)
 				}
-				skipNextText = false
 
 			case "inline_command":
 				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
@@ -412,7 +381,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				} else {
 					b.WriteString(raw) // fallback: no braces found
 				}
-				skipNextText = false
 
 			case "link_command":
 				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
@@ -489,7 +457,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 						b.WriteByte(' ')
 					}
 				}
-				skipNextText = false
 
 			default:
 				// Unknown or future node types (e.g. brace_group from a
@@ -505,7 +472,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 						b.WriteByte(' ')
 					}
 				}
-				skipNextText = false
 			}
 		}
 	}
