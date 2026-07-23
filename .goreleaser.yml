@@ -7,6 +7,7 @@ release:
     owner: veshivas
     name: vale
   prerelease: false
+  draft: true
 
 builds:
   - id: vale-darwin-amd64
@@ -96,13 +97,6 @@ archives:
       {{- else }}{{- title .Os }}_{{ end }}
       {{- if eq .Arch "amd64" }}64-bit
       {{- else }}{{ .Arch }}{{ end }}
-
-# Create the GitHub release as a draft and upload assets to it *before* it's
-# published. A published release is immutable and rejects new assets ("422
-# Cannot upload assets to an immutable release"), so assets must be attached
-# while it's still a draft; publish it from the UI once GoReleaser finishes.
-release:
-  draft: true
 
 checksum:
   name_template: checksums.txt
