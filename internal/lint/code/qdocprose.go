@@ -39,30 +39,6 @@ var codeBlockExitCommands = map[string]bool{
 	"endcode": true, "endqml": true,
 }
 
-// skipQDocProseUntilBlank lists commands whose text content (until the first
-// blank line) is already linted via their own CommandMatch scope in Pass 1
-// (brief.line, note.line, warning.line) or is a heading title that belongs
-// to a different scope (section headings). qdocCollectProse skips all content
-// after these commands until a \n\n boundary, then resumes. Without this,
-// scope:text rules would fire twice — once in Pass 1 and again in Pass 2 —
-// or heading argument text would be merged into the following prose paragraph,
-// causing spurious SentenceLength alerts.
-var skipQDocProseUntilBlank = map[string]bool{
-	"brief": true, "note": true, "warning": true,
-}
-
-// skipQDocProseUntilNewline lists commands whose argument occupies the rest of
-// the current line only. The skip ends at the first \n so that prose starting
-// on the very next line (no blank line required) is collected normally.
-// Section headings and \title always put their text on the same line as the
-// command; prose may immediately follow on the next line without an intervening
-// blank. \title is also linted in Pass 1 via CommandMatch, so it must not flow
-// into Pass 2 prose reconstruction.
-var skipQDocProseUntilNewline = map[string]bool{
-	"section1": true, "section2": true, "section3": true, "section4": true,
-	"title": true,
-}
-
 
 // GetQDocProseBlocks parses source with the QDoc grammar and returns one
 // Comment per block_comment node whose reconstructed prose is non-empty.
@@ -148,24 +124,26 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 }
 
 // qdocCollectProse appends prose text from the markup children of node to b.
-// It handles the five markup child types:
+// It handles the markup child types:
 //   - block_command: recurses into prose-bearing blocks (list, table, legalese, quotation);
 //     skips raw_block and others without prose content.
-//   - command: sets state flags (code-block, skip-args, skip-until-blank) and
-//     emits any content after the command keyword. When TokenIgnore replaces
-//     \l{target} with length-preserving spaces, the remaining whitespace and
-//     {alias} become anonymous bytes in the preceding command node's byte range.
-//     Emitting them preserves both line-number alignment (\n\n after headings)
-//     and column accuracy ({alias} at the right offset in the source line).
-//   - text: appended when not suppressed by a skip or code-block flag.
-//   - inline_command: inline_text content appended with braces stripped
-//     (e.g. \c{write()} → "write()").
-//   - link_command: v0.2.1+ grammar node for \l{target}{alias}; emits the alias
-//     text (inline_text children) so prose is complete for NLP rules.
+//   - section_command, title_command: heading text captured elsewhere (Pass 1 Expr
+//     query); the entire node is blanked with length-preserving spaces.
+//   - brief_command, note_command, warning_command: admonition text captured
+//     elsewhere; the entire node is blanked with length-preserving spaces.
+//   - command: manages code-block state. When TokenIgnore replaces \l{target}
+//     with length-preserving spaces, emitting the command node's trailing bytes
+//     preserves line-number alignment and column accuracy.
+//   - text: appended normally when not inside a code block.
+//   - inline_command: inline_text content appended with braces stripped.
+//   - link_command: emits the alias text (or blanks the node if no alias).
+//
+// After each markup node, newlines from the extras gap to the next markup node
+// are emitted. Dedicated terminal nodes (heading_text, brief_text, admonition_text)
+// stop before \n or \n\n, leaving those bytes in the extras gap; emitting them
+// here keeps prose line numbers aligned with source line numbers.
 func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 	inCodeBlock := false
-	skipUntilBlankLine := false
-	skipUntilNewline := false
 
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		markup := node.NamedChild(i)
@@ -177,8 +155,35 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 			child := markup.NamedChild(j)
 
 			switch child.Type() {
+			case "section_command", "title_command":
+				// Heading text is captured by a Pass 1 Expr query; blank the
+				// entire node here so the heading does not flow into prose and
+				// cause spurious SentenceLength alerts on the title text.
+				// The trailing \n lives in the extras gap and is emitted below.
+				for _, r := range child.Content(source) {
+					if r == '\n' {
+						b.WriteRune('\n')
+					} else {
+						b.WriteByte(' ')
+					}
+				}
+
+			case "brief_command", "note_command", "warning_command":
+				// Admonition text (brief_text / admonition_text) is captured by
+				// a Pass 1 Expr query. Blank the node content so it is excluded
+				// from prose reconstruction; preserve embedded newlines (from
+				// continuation lines) so subsequent line numbers stay aligned.
+				// The trailing \n\n (blank-line separator) lives in the extras
+				// gap between this markup and the next, and is emitted below.
+				for _, r := range child.Content(source) {
+					if r == '\n' {
+						b.WriteRune('\n')
+					} else {
+						b.WriteByte(' ')
+					}
+				}
+
 			case "block_command":
-				skipUntilBlankLine = false
 				// block_command has one named child: the specific block type.
 				// Recurse into prose-bearing blocks; skip raw and table.
 				if child.NamedChildCount() > 0 {
@@ -237,19 +242,6 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					inCodeBlock = false
 				} else if codeBlockEnterCommands[cmdName] {
 					inCodeBlock = true
-					skipUntilBlankLine = false
-				} else if skipQDocProseUntilBlank[cmdName] {
-					// brief/note/warning: skip all content until first blank
-					// line. Their text is linted separately via lintLines +
-					// lintProse on the .line comment produced by runCommandMatch.
-					skipUntilBlankLine = true
-					skipUntilNewline = false
-				} else if skipQDocProseUntilNewline[cmdName] {
-					// section1-4: argument is a single-line heading title;
-					// skip only to the first \n so prose that immediately
-					// follows (no blank line required) is collected normally.
-					skipUntilNewline = true
-					skipUntilBlankLine = false
 				}
 				// Emit the command node with length-preserving blanks for
 				// the keyword prefix (\keyword) and any trailing content after
@@ -292,7 +284,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				}
 				if keywordEnd < child.EndByte() {
 					rest := source[keywordEnd:child.EndByte()]
-					if inCodeBlock || skipUntilBlankLine {
+					if inCodeBlock {
 						for _, r := range string(rest) {
 							if r == '\n' {
 								b.WriteRune('\n')
@@ -313,48 +305,12 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 							b.WriteRune('\n')
 						}
 					}
-				} else if skipUntilNewline {
-					// Section heading: skip the title text on the command's
-					// line (replace with spaces for column accuracy), emit the
-					// \n, then collect the rest as normal prose. The prose may
-					// start on the very next line with no blank line required.
-					if idx := strings.Index(content, "\n"); idx >= 0 {
-						for j := 0; j < idx; j++ {
-							b.WriteByte(' ')
-						}
-						b.WriteRune('\n')
-						b.WriteString(content[idx+1:])
-						skipUntilNewline = false
-					} else {
-						// Entire node is still heading text (no newline yet).
-						for range content {
-							b.WriteByte(' ')
-						}
-					}
-				} else if skipUntilBlankLine {
-					// Skip content until the first blank line (\n\n), then
-					// resume prose collection from that point onward.
-					if idx := strings.Index(content, "\n\n"); idx >= 0 {
-						for _, r := range content[:idx] {
-							if r == '\n' {
-								b.WriteRune('\n')
-							}
-						}
-						b.WriteString(content[idx:])
-						skipUntilBlankLine = false
-					} else {
-						for _, r := range content {
-							if r == '\n' {
-								b.WriteRune('\n')
-							}
-						}
-					}
 				} else {
 					b.WriteString(content)
 				}
 
 			case "inline_command":
-				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
+				if inCodeBlock {
 					break
 				}
 				// Emit inline_command content with the command wrapper blanked so
@@ -383,7 +339,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				}
 
 			case "link_command":
-				if inCodeBlock || skipUntilBlankLine || skipUntilNewline {
+				if inCodeBlock {
 					// Preserve newlines from skipped link content.
 					for _, r := range child.Content(source) {
 						if r == '\n' {
@@ -471,6 +427,20 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 					} else {
 						b.WriteByte(' ')
 					}
+				}
+			}
+		}
+
+		// Emit newlines from the extras gap between this markup node and the
+		// next. Dedicated terminal nodes (heading_text, brief_text,
+		// admonition_text) stop before \n or \n\n, leaving those bytes as
+		// extras between markup nodes. Without emitting them, prose line numbers
+		// after the gap drift away from the source line numbers.
+		if i+1 < int(node.NamedChildCount()) {
+			next := node.NamedChild(i + 1)
+			for _, ch := range source[markup.EndByte():next.StartByte()] {
+				if ch == '\n' {
+					b.WriteByte('\n')
 				}
 			}
 		}
