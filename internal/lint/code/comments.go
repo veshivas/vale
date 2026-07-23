@@ -25,11 +25,12 @@ type Comment struct {
 // comments with different scopes (e.g. a brief.line after a text.comment.line)
 // from being merged, which would lose their distinct scope identity.
 func doneMerging(curr, prev Comment) bool {
-	if prev.Scope != curr.Scope {
+	switch {
+	case prev.Scope != curr.Scope:
 		return true
-	} else if prev.Line != curr.Line-1 {
+	case prev.Line != curr.Line-1:
 		return true
-	} else if prev.Offset != curr.Offset {
+	case prev.Offset != curr.Offset:
 		return true
 	}
 	// A text node whose raw Source spans a line boundary with trailing content
@@ -148,9 +149,9 @@ func GetComments(source []byte, lang *Language) ([]Comment, error) {
 		if query.CommandMatch == "" {
 			continue
 		}
-		results, nodeBytes, err := engine.runCommandMatch(query, source)
-		if err != nil {
-			return comments, err
+		results, nodeBytes, matchErr := engine.runCommandMatch(query, source)
+		if matchErr != nil {
+			return comments, matchErr
 		}
 		comments = append(comments, results...)
 		for k := range nodeBytes {

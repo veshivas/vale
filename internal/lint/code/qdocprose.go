@@ -39,7 +39,6 @@ var codeBlockExitCommands = map[string]bool{
 	"endcode": true, "endqml": true,
 }
 
-
 // GetQDocProseBlocks parses source with the QDoc grammar and returns one
 // Comment per block_comment node whose reconstructed prose is non-empty.
 //
@@ -106,12 +105,12 @@ func GetQDocProseBlocks(source []byte) ([]Comment, error) {
 // returns the prose as two strings:
 //   - raw:   original whitespace preserved (passed to adjustAlerts as Source)
 //   - clean: leading whitespace stripped per line  (passed to lintProse as Text)
-func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) {
+func qdocReconstructProse(node *sitter.Node, source []byte) (string, string) {
 	var b strings.Builder
 	qdocCollectProse(node, source, &b)
-	raw = b.String()
+	raw := b.String()
 	if raw == "" {
-		return
+		return "", ""
 	}
 
 	var cleanBuf bytes.Buffer
@@ -119,8 +118,7 @@ func qdocReconstructProse(node *sitter.Node, source []byte) (raw, clean string) 
 		cleanBuf.WriteString(strings.TrimLeft(line, " \t"))
 		cleanBuf.WriteString("\n")
 	}
-	clean = cleanBuf.String()
-	return
+	return raw, cleanBuf.String()
 }
 
 // qdocCollectProse appends prose text from the markup children of node to b.
@@ -327,13 +325,13 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 				// TokenIgnores and is blanked before tree-sitter parsing.
 				raw := child.Content(source)
 				open := strings.Index(raw, "{")
-				close := strings.LastIndex(raw, "}")
-				if open >= 0 && close > open {
-					for i := 0; i <= open; i++ {
+				closeBrace := strings.LastIndex(raw, "}")
+				if open >= 0 && closeBrace > open {
+					for k := 0; k <= open; k++ {
 						b.WriteByte(' ') // blank \cmd{ prefix
 					}
-					b.WriteString(raw[open+1 : close]) // emit inner text
-					b.WriteByte(' ')                   // blank } suffix
+					b.WriteString(raw[open+1 : closeBrace]) // emit inner text
+					b.WriteByte(' ')                        // blank } suffix
 				} else {
 					b.WriteString(raw) // fallback: no braces found
 				}
@@ -399,7 +397,7 @@ func qdocCollectProse(node *sitter.Node, source []byte, b *strings.Builder) {
 						// Blank from child start through (and including) the '{'.
 						// This covers: \l, target brace-group, any inter-token
 						// whitespace, and the alias opening brace.
-						aliasBrace := aliasNode.StartByte() + uint32(braceOffset)
+						aliasBrace := aliasNode.StartByte() + uint32(braceOffset) //nolint:gosec // braceOffset >= 0 checked above
 						for i := child.StartByte(); i <= aliasBrace; i++ {
 							if source[i] == '\n' {
 								b.WriteRune('\n')

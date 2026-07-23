@@ -28,7 +28,7 @@ func TestQDocComments(t *testing.T) {
 	want, err := os.ReadFile(expected)
 	if err != nil {
 		// First run: write actual output so the developer can inspect it.
-		_ = os.MkdirAll(filepath.Join(binDir), 0755)
+		_ = os.MkdirAll(binDir, 0755)
 		_ = os.WriteFile(filepath.Join(binDir, "9.json"), []byte(got), 0600)
 		t.Fatalf("missing expected fixture %s (actual output written to bin/9.json): %v", expected, err)
 	}
@@ -620,7 +620,9 @@ func TestGetQDocCommentsTableCellLineNumbers(t *testing.T) {
 //
 // adjustAlerts computes source_line = prose_line + comment.Line - 1.
 // For a block_comment starting at line 1, comment.Line = 1, so:
-//   source_line = prose_line + 1 - 1 = prose_line.
+//
+//	source_line = prose_line + 1 - 1 = prose_line.
+//
 // The prose line of each sentence must therefore equal its source line.
 func TestGetQDocProseBlocksTableLineNumbers(t *testing.T) {
 	src := []byte(`/*!
@@ -686,20 +688,21 @@ func TestGetQDocProseBlocksTableLineNumbers(t *testing.T) {
 // per section heading.
 //
 // Source line layout (1-indexed, block_comment starts at line 1):
-//   1: /*!
-//   2:     \class QRuntimeLoader
-//   3:     \brief Loads resources at run-time.
-//   4:     (blank)
-//   5:     \section1 Startup behavior on \MACRO1
-//   6:     (blank)
-//   7:     \l{QObject}{QObjects} are initialized when the application starts.
-//   8:     All components are loaded from the resource bundle automatically.
-//   9:     (blank)
-//  10:     \section1 Shutdown with \BUILDVAR
-//  11:     (blank)
-//  12:     \l{QObject::deleteLater()}{deleteLater()} is called before the loop.
-//  13:     All resources are released when the object is destroyed.
-//  14: */
+//
+//	 1: /*!
+//	 2:     \class QRuntimeLoader
+//	 3:     \brief Loads resources at run-time.
+//	 4:     (blank)
+//	 5:     \section1 Startup behavior on \MACRO1
+//	 6:     (blank)
+//	 7:     \l{QObject}{QObjects} are initialized when the application starts.
+//	 8:     All components are loaded from the resource bundle automatically.
+//	 9:     (blank)
+//	10:     \section1 Shutdown with \BUILDVAR
+//	11:     (blank)
+//	12:     \l{QObject::deleteLater()}{deleteLater()} is called before the loop.
+//	13:     All resources are released when the object is destroyed.
+//	14: */
 //
 // comment.Line = 1 (block starts at row 0), so source_line = prose_line.
 func TestGetQDocProseBlocksSectionWithMacroLineNumbers(t *testing.T) {
@@ -762,18 +765,20 @@ func TestGetQDocProseBlocksSectionWithMacroLineNumbers(t *testing.T) {
 // they contain no prose text.
 //
 // Source layout (block_comment starts at line 1, so source_line = prose_line):
-//   1:  /*!
-//   2:      \class Foo
-//   3:      \brief A foo.
-//   4:      (blank)
-//   5:      Intro prose.
-//   6:      \list
-//   7:      \li First list item is set by default.
-//   8:      \li Second list item is set to NEW.
-//   9:      \endlist
-//  10:      (blank)
-//  11:      Post-list prose.
-//  12:  */
+//
+//	 1:  /*!
+//	 2:      \class Foo
+//	 3:      \brief A foo.
+//	 4:      (blank)
+//	 5:      Intro prose.
+//	 6:      \list
+//	 7:      \li First list item is set by default.
+//	 8:      \li Second list item is set to NEW.
+//	 9:      \endlist
+//	10:      (blank)
+//	11:      Post-list prose.
+//	12:  */
+//
 // TestGetQDocProseBlocksLinkCommand verifies link_command handling in
 // qdocCollectProse:
 //
@@ -1133,21 +1138,6 @@ func TestGetQDocProseBlocksSectionArgLineNumbers(t *testing.T) {
 	}
 }
 
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // TestGetQDocProseBlocksIncludeNewlines checks that \include commands
 // do not drop newlines from the reconstructed prose buffer.
 func TestGetQDocProseBlocksIncludeNewlines(t *testing.T) {
@@ -1458,4 +1448,3 @@ func TestGetQDocProseBlocksLinkRawLines(t *testing.T) {
 		})
 	}
 }
-

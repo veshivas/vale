@@ -14,7 +14,9 @@
 //	        enable scope:sentence rules (OxfordComma, SentenceLength, etc.).
 //
 // File routing: .qdoc → format "markup" → lintQDoc (this file).
-//              .qdocinc → format "markup" → lintQDocInc (this file).
+//
+//	.qdocinc → format "markup" → lintQDocInc (this file).
+//
 // Embedded QDoc in .cpp/.qml → lintFragments → lintQDocFragments → lintQDocBlock.
 package lint
 
@@ -260,7 +262,8 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 		l.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
-		if isQDocProseCommandScope(comment.Scope) {
+		switch {
+		case isQDocProseCommandScope(comment.Scope):
 			// brief/note/warning: lintProse covers both scope:text and
 			// scope:sentence rules in one pass.
 			//
@@ -271,7 +274,7 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 			if err = l.lintProse(f, block, len(f.Lines)); err != nil {
 				return err
 			}
-		} else if !strings.HasPrefix(comment.Scope, "text") {
+		case !strings.HasPrefix(comment.Scope, "text"):
 			// Non-text scope (e.g. "meta.image.line"): use comment.Scope
 			// directly so the block scope is not prefixed with "text". This
 			// prevents text-scoped rules (Vale.Terms, Microsoft.*) from firing
@@ -281,7 +284,7 @@ func (l *Linter) runQDocPasses(f *core.File, content string, lineOffset int) err
 			if err = l.lintBlock(f, block, len(f.Lines), 0, true); err != nil {
 				return err
 			}
-		} else {
+		default:
 			// Headings and other single-line scopes: lintLines with lookup=true.
 			if err = l.lintLines(f); err != nil {
 				return err

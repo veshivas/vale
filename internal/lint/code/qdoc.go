@@ -16,11 +16,9 @@ package code
 
 import (
 	"regexp"
-	"unsafe"
-
-	qdoc "github.com/veshivas/tree-sitter-qdoc/bindings/go"
 
 	sitter "github.com/smacker/go-tree-sitter"
+	qdoc "github.com/veshivas/tree-sitter-qdoc/bindings/go"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 )
@@ -40,7 +38,7 @@ import (
 func QDoc() *Language {
 	return &Language{
 		Delims: regexp.MustCompile(`/\*!|\*/`),
-		Parser: sitter.NewLanguage(unsafe.Pointer(qdoc.Language())),
+		Parser: sitter.NewLanguage(qdoc.Language()),
 		Queries: []core.Scope{
 			// Catch-all: every prose text node not captured by a named scope below.
 			{Name: "", Expr: "(text) @comment"},
@@ -59,7 +57,7 @@ func QDoc() *Language {
 
 			// \note, \warning: admonition text spanning continuation lines until
 			// the first blank line or next QDoc command.
-			{Name: "note",    Expr: `(note_command    text: (admonition_text) @comment)`},
+			{Name: "note", Expr: `(note_command    text: (admonition_text) @comment)`},
 			{Name: "warning", Expr: `(warning_command text: (admonition_text) @comment)`},
 
 			// Image commands missing alt text. The trailing-dot anchor (`. `)
