@@ -906,6 +906,87 @@ func TestGetQDocProseBlocksListLineNumbers(t *testing.T) {
 	}
 }
 
+// TestGetQDocProseBlocksNestedListLineNumbers verifies that prose after a nested
+// \list..\endlist block is reported at the correct line, and that \li items
+// containing bare * characters (glob patterns, pointer types) are not lost.
+//
+// Source layout:
+//
+//	 1: /*!
+//	 2:     \page test.html
+//	 3:
+//	 4:     Intro prose.
+//	 5:
+//	 6:     \list
+//	 7:     \li Outer item one.
+//	 8:         \list
+//	 9:             \li Inner item A.
+//	10:             \li An image file such as *.elf or *.hex.
+//	11:         \endlist
+//	12:
+//	13:     \li Outer item two.
+//	14:     \endlist
+//	15:
+//	16:     Post-list prose.
+//	17: */
+func TestGetQDocProseBlocksNestedListLineNumbers(t *testing.T) {
+	src := []byte("/*!\n" +
+		"    \\page test.html\n" +
+		"\n" +
+		"    Intro prose.\n" +
+		"\n" +
+		"    \\list\n" +
+		"    \\li Outer item one.\n" +
+		"        \\list\n" +
+		"            \\li Inner item A.\n" +
+		"            \\li An image file such as *.elf or *.hex.\n" +
+		"        \\endlist\n" +
+		"\n" +
+		"    \\li Outer item two.\n" +
+		"    \\endlist\n" +
+		"\n" +
+		"    Post-list prose.\n" +
+		"*/")
+
+	blocks, err := GetQDocProseBlocks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"Intro prose.":                          4,
+		"Outer item one.":                       7,
+		"Inner item A.":                         9,
+		"An image file such as *.elf or *.hex.": 10,
+		"Outer item two.":                       13,
+		"Post-list prose.":                      16,
+	}
+
+	for substr, wantLine := range want {
+		found := false
+		for _, b := range blocks {
+			lines := strings.Split(b.Text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, substr) {
+					gotLine := i + 1
+					if gotLine != wantLine {
+						t.Errorf("prose %q: line %d, want %d\nprose text:\n%q",
+							substr, gotLine, wantLine, b.Text)
+					}
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			t.Errorf("prose %q not found in prose blocks", substr)
+		}
+	}
+}
+
 // TestGetQDocProseBlocksTwoSections reproduces a line-shift bug seen in
 // profiling.qdoc where prose after the second \section1 lands one line early.
 //

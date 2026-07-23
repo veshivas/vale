@@ -15,6 +15,7 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/jdkato/go-tree-sitter-julia v0.1.0
 	github.com/jdkato/twine v0.10.2
+	github.com/litao91/goldmark-mathjax v0.0.0-20210217064022-a43cf739a50f
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/niklasfasching/go-org v1.7.0
 	github.com/olekukonko/tablewriter v1.1.4
@@ -26,7 +27,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tomwright/dasel/v2 v2.8.1
 	github.com/tomwright/dasel/v3 v3.3.2
-	github.com/veshivas/tree-sitter-qdoc v0.2.2
+	github.com/veshivas/tree-sitter-qdoc v0.3.0
 	github.com/yuin/goldmark v1.7.8
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 	golang.org/x/net v0.47.0
@@ -48,7 +49,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/litao91/goldmark-mathjax v0.0.0-20210217064022-a43cf739a50f // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
