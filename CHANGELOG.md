@@ -4,6 +4,33 @@ All notable changes to the QDoc support fork are documented here.
 
 ---
 
+## [v3.15.1-qdoc] - 2026-07-23
+
+Rebased onto upstream vale v3.15.1 (Python docstring capture, indent
+normalisation fixes, and numerous upstream correctness fixes).
+
+### Added
+
+- **`.qdocinc` snippet files linted** — `.qdocinc` files contain freeform QDoc prose with `//! [id]` section-delimiter lines but no `/*!...*/` block delimiters. A dedicated `lintQDocInc` handler now blanks comment and delimiter lines (preserving newlines), wraps the content in a synthetic `/*!...*/` block, and runs the full two-pass QDoc pipeline. All existing rules — `\brief`/`\note` scopes, sentence rules, `BlockIgnores`/`TokenIgnores` — apply unchanged.
+
+- **Dedicated AST node types for `\section1`–`\section4`, `\title`, `\brief`, `\note`, `\warning`** — tree-sitter-qdoc v0.3.0 introduces typed grammar nodes (`section_command`, `title_command`, `brief_command`, `note_command`, `warning_command`) each with a single-line terminal (`heading_text`, `brief_text`, `admonition_text`) using `token.immediate`. Vale queries now use `Expr` patterns on these nodes instead of CommandMatch sibling-walking, giving exact column positions without post-processing. Bumps tree-sitter-qdoc to v0.3.0.
+
+### Fixed
+
+- **Consecutive `\target`/`\keyword` anchors reported at wrong column** — `coalesce()` merged consecutive anchor commands (same scope, offset, line count) into a single multi-line `Comment`, causing `adjustAlerts` to treat the second command as line 2 and report column 1. Anchor comments are now excluded from merging; each is a separate `Comment`. `adjustAlerts` additionally applies the absolute source column directly for single-line anchor fragments instead of computing relative padding from leading spaces.
+
+- **Leading whitespace on in-grammar token captures shifted columns** — The `image_alt` token for `\inlineimage` starts at the space before `{`, so `Source` came back as `" {Alt text}"`. `adjustAlerts` computed a large negative padding, landing alerts near the start of the line. For non-catch-all single-line captures, leading horizontal whitespace is now stripped from the captured text and `startCol` is advanced accordingly.
+
+- **Incorrect column offset for inline matches in multi-line command arguments** — `adjustAlerts` applied only the block's base column offset and ignored the match's own column within the comment text. For `\brief`, `\note`, and `\warning` blocks, all alerts were reported at the block's starting column. The match offset (`Span[0]-1`) is now added to both span endpoints.
+
+- **Captures dropped in catch-all query path** — The catch-all query runner silently discarded any capture whose name was not `"comment"`. Removed the filter; skip-set and scope guards are the correct exclusion points.
+
+- **`skipQDocProseArgs` / `skipNextText` mechanism removed** — The heuristic that suppressed topic-command arguments from prose reconstruction was broken: the greedy `text` grammar rule can bundle multiple lines into one node, so `skipNextText` could silently swallow real prose. Argument suppression is now handled via `BlockIgnores` / `TokenIgnores` in the Vale config.
+
+- **`skipUntilBlankLine` / `skipUntilNewline` state machines removed** — No longer needed now that `\brief`, `\note`, `\warning`, `\section1`–`\section4`, and `\title` are captured by dedicated grammar nodes. `qdocCollectProse` blanks these nodes with length-preserving spaces and emits extras-gap newlines after each markup node to keep line numbers aligned.
+
+---
+
 ## [v3.14.2-qdoc] - 2026-06-04
 
 ### Added
