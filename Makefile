@@ -85,4 +85,4 @@ choco-cross:
 		-v `pwd`/sysroot:/sysroot \
 		-w /go/src/$(PACKAGE_NAME) \
 		jdkato/choco-cross:${GOLANG_CROSS_VERSION} \
-		release --clean
+		release --clean --skip=chocolatey # skip until QDoc support merges upstream to vale-cli/vale
