@@ -29,31 +29,38 @@ import (
 //
 // Queries are evaluated in two passes by GetComments (see comments.go):
 //
-//	Pass 1 — CommandMatch queries: each matched command's text argument is
-//	         reconstructed by walking markup siblings (see runCommandMatch).
-//	         Consumed text-node start bytes are recorded so Pass 2 skips them.
-//	Pass 2 — Plain Expr queries: the catch-all "(text) @comment" captures any
-//	         text node not already consumed by Pass 1, preventing duplicates.
+//	Pass 1 — CommandMatch queries: used only for \target and \keyword anchors,
+//	         where the argument is a bare identifier reconstructed by sibling walking.
+//	         Consumed node start bytes are recorded so Pass 2 skips them.
+//	Pass 2 — Plain Expr queries: captures scoped comment text directly via
+//	         tree-sitter node queries. Headings, title, brief, note, and warning
+//	         text are captured from dedicated grammar nodes (section_command,
+//	         title_command, brief_command, note_command, warning_command).
+//	         The catch-all "(text) @comment" captures remaining prose text nodes.
 func QDoc() *Language {
 	return &Language{
 		Delims: regexp.MustCompile(`/\*!|\*/`),
 		Parser: sitter.NewLanguage(unsafe.Pointer(qdoc.Language())),
 		Queries: []core.Scope{
-			// Catch-all: every text node not consumed by a CommandMatch query.
+			// Catch-all: every prose text node not captured by a named scope below.
 			{Name: "", Expr: "(text) @comment"},
 
-			// \section1 through \section6. CommandMatch implies first-line-only.
-			{Name: "heading", CommandMatch: `^section[1-6]$`},
+			// \section1–\section4: heading text captured from the dedicated grammar
+			// node. FirstLine clips to the heading line (heading_text already stops
+			// at \n, so this is redundant functionally but makes .line scope explicit).
+			{Name: "heading", Expr: `(section_command text: (heading_text) @comment)`, FirstLine: true},
 
-			// Admonition-style commands: text spans until the first blank line
-			// (\n\n). Their prose is excluded from GetQDocProseBlocks (Pass 2)
-			// via skipQDocProseUntilBlank to prevent duplicate alerts.
-			{Name: "brief", CommandMatch: `^brief$`, UntilBlankLine: true},
-			{Name: "note", CommandMatch: `^note$`, UntilBlankLine: true},
-			{Name: "warning", CommandMatch: `^warning$`, UntilBlankLine: true},
+			// \title: page title, scoped separately from headings so that
+			// Qt.QDocPageTitle (title-style capitalisation) fires only on \title.
+			{Name: "title", Expr: `(title_command text: (heading_text) @comment)`, FirstLine: true},
 
-			// \title — single-line like headings.
-			{Name: "title", CommandMatch: `^title$`},
+			// \brief: one-sentence class or function description.
+			{Name: "brief", Expr: `(brief_command text: (brief_text) @comment)`},
+
+			// \note, \warning: admonition text spanning continuation lines until
+			// the first blank line or next QDoc command.
+			{Name: "note",    Expr: `(note_command    text: (admonition_text) @comment)`},
+			{Name: "warning", Expr: `(warning_command text: (admonition_text) @comment)`},
 
 			// Image commands missing alt text. The trailing-dot anchor (`. `)
 			// fires only when the filename is the last child, i.e. no alt text.

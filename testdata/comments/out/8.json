@@ -14,25 +14,53 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "Displays a list of items.\n    Can span multiple lines until the first blank line.",
-        "Source": "Displays a list of items.\n    Can span multiple lines until the first blank line.",
+        "Text": "\nCan span multiple lines until the first blank line.\n\nThis widget displays a configurable list of items.\n\n\n",
+        "Source": "\n    Can span multiple lines until the first blank line.\n\n    This widget displays a configurable list of items.\n\n    ",
+        "Line": 3,
+        "Offset": 36,
+        "Scope": "text.comment.block"
+    },
+    {
+        "Text": "Displays a list of items.",
+        "Source": "Displays a list of items.",
         "Line": 3,
         "Offset": 11,
         "Scope": "text.comment.brief.line"
     },
     {
-        "Text": "Call refresh() after modifying the model.",
-        "Source": "Call refresh() after modifying the model.",
+        "Text": "\n\n    \n",
+        "Source": "\n\n    ",
+        "Line": 8,
+        "Offset": 55,
+        "Scope": "text.comment.block"
+    },
+    {
+        "Text": "Call \\c{refresh()} after modifying the model.",
+        "Source": "Call \\c{refresh()} after modifying the model.",
         "Line": 8,
         "Offset": 10,
         "Scope": "text.comment.note.line"
     },
     {
-        "Text": "Do not call setCount() while the widget is visible.",
-        "Source": "Do not call setCount() while the widget is visible.",
+        "Text": "\n\n    \n",
+        "Source": "\n\n    ",
+        "Line": 10,
+        "Offset": 72,
+        "Scope": "text.comment.block"
+    },
+    {
+        "Text": "Do not call \\c{setCount()} while the widget is \\c{visible}.",
+        "Source": "Do not call \\c{setCount()} while the widget is \\c{visible}.",
         "Line": 10,
         "Offset": 13,
         "Scope": "text.comment.warning.line"
+    },
+    {
+        "Text": "\n\n    \n",
+        "Source": "\n\n    ",
+        "Line": 12,
+        "Offset": 25,
+        "Scope": "text.comment.block"
     },
     {
         "Text": "itemwidget.png",
@@ -40,6 +68,13 @@
         "Line": 12,
         "Offset": 11,
         "Scope": "meta.image.line"
+    },
+    {
+        "Text": "\n\n    \n",
+        "Source": "\n\n    ",
+        "Line": 14,
+        "Offset": 72,
+        "Scope": "text.comment.block"
     },
     {
         "Text": "The annotated version of the widget.",

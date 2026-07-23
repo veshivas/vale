@@ -245,7 +245,21 @@ func collectCommandText(markupNode *sitter.Node, source []byte) (string, []uint3
 				consumed = append(consumed, child.StartByte())
 				b.WriteString(t)
 			}
-		case "command", "block_command":
+		case "command":
+			// Substitution macros (\QUL, \PLATFORM1, \macos) parse as
+			// command → macro_name. They are inert in the argument text;
+			// emit length-preserving spaces so subsequent byte offsets stay
+			// aligned with the source, then continue collecting.
+			// Documentation commands (\brief, \note → command_name) start a
+			// new section — stop collection.
+			cmdChild := child.NamedChild(0)
+			if cmdChild != nil && cmdChild.Type() == "macro_name" {
+				b.WriteString(strings.Repeat(" ", len(child.Content(source))))
+				sibling = sibling.NextNamedSibling()
+				continue
+			}
+			return b.String(), consumed
+		case "block_command":
 			return b.String(), consumed
 		}
 		sibling = sibling.NextNamedSibling()
