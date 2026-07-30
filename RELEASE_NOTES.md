@@ -1,3 +1,15 @@
+# v3.15.1-qdoc
+
+*   [`6229b6dc`](https://github.com/veshivas/vale/commit/6229b6dc) feat(qdoc): lint .qdocinc snippet files via wrap-and-parse pipeline
+*   [`fd82713f`](https://github.com/veshivas/vale/commit/fd82713f) feat(qdoc): use dedicated AST node types for heading/brief/note/warning
+*   [`3b2cebab`](https://github.com/veshivas/vale/commit/3b2cebab) chore(deps): bump tree-sitter-qdoc to v0.3.0
+*   [`2cbb8457`](https://github.com/veshivas/vale/commit/2cbb8457) fix(qdoc): correct column positions for consecutive anchor commands
+*   [`a2b8d8f1`](https://github.com/veshivas/vale/commit/a2b8d8f1) fix(qdoc): strip leading whitespace from in-grammar token captures
+*   [`858353bc`](https://github.com/veshivas/vale/commit/858353bc) fix(qdoc): correct column offset for inline matches in multi-line command arguments
+*   [`eadab074`](https://github.com/veshivas/vale/commit/eadab074) fix(qdoc): remove @comment capture name filter in catch-all query path
+*   [`173005f6`](https://github.com/veshivas/vale/commit/173005f6) fix(qdoc): remove skipQDocProseArgs / skipNextText from qdocCollectProse
+*   [`e0e7dae2`](https://github.com/veshivas/vale/commit/e0e7dae2) fix(core): correct column for end-of-string existence matches
+
 # v3.14.2-qdoc
 
 *   [`fdeac45f`](https://github.com/veshivas/vale/commit/fdeac45f) fix(qdoc): split prose blocks into paragraphs before NLP sentence detection

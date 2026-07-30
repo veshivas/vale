@@ -29,6 +29,8 @@ normalisation fixes, and numerous upstream correctness fixes).
 
 - **`skipUntilBlankLine` / `skipUntilNewline` state machines removed** — No longer needed now that `\brief`, `\note`, `\warning`, `\section1`–`\section4`, and `\title` are captured by dedicated grammar nodes. `qdocCollectProse` blanks these nodes with length-preserving spaces and emits extras-gap newlines after each markup node to keep line numbers aligned.
 
+- **End-of-line existence matches reported at wrong column** — `assignLoc`'s `exact` path used a strict `>` to compare `loc[1]` against line length. End-of-line patterns (e.g. `Qt.QDocBrief`'s `[^.!?]\s*$`) hit `loc[1] == len(l)`, failed the check, and fell through to `initialPosition`, which re-searches for the first occurrence of the matched character in the line. A match for `n` at the end of "Defines a rectangle in the plane using integer precision" was reported at the `n` in "plane" (col 30) instead of "precision" (col 67). The check is now `<=`; when exact, the column is derived from `loc[0]` directly.
+
 ---
 
 ## [v3.14.2-qdoc] - 2026-06-04
