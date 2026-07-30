@@ -24,7 +24,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	"github.com/dlclark/regexp2/v2"
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/glob"
 	"github.com/errata-ai/vale/v3/internal/lint/code"
@@ -127,7 +127,7 @@ func applyQDocPatterns(c *core.Config, normedExt, realExt, content string) (stri
 			continue
 		}
 		for _, r := range regexes {
-			pat, errc := regexp2.CompileStd(r)
+			pat, errc := regexp2.Compile(r)
 			if errc != nil {
 				return content, core.NewE201FromTarget(errc.Error(), r, c.Flags.Path)
 			}
@@ -165,7 +165,7 @@ func applyQDocPatterns(c *core.Config, normedExt, realExt, content string) (stri
 			continue
 		}
 		for _, r := range regexes {
-			pat, errc := regexp2.CompileStd(r)
+			pat, errc := regexp2.Compile(r)
 			if errc != nil {
 				return content, core.NewE201FromTarget(errc.Error(), r, c.Flags.Path)
 			}
